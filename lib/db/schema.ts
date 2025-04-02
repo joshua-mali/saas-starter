@@ -1,22 +1,24 @@
+import { relations } from 'drizzle-orm';
 import {
+  integer,
   pgTable,
   serial,
-  varchar,
   text,
   timestamp,
-  integer,
+  uuid,
+  varchar
 } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
 
-export const users = pgTable('users', {
-  id: serial('id').primaryKey(),
+const authSchema = 'auth';
+export const authUsers = pgTable('users', {
+    id: uuid('id').primaryKey(),
+  }, (table) => ({ schema: authSchema })
+);
+
+export const profiles = pgTable('profiles', {
+  id: uuid('id').primaryKey().references(() => authUsers.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 100 }),
-  email: varchar('email', { length: 255 }).notNull().unique(),
-  passwordHash: text('password_hash').notNull(),
-  role: varchar('role', { length: 20 }).notNull().default('member'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
-  deletedAt: timestamp('deleted_at'),
 });
 
 export const teams = pgTable('teams', {
@@ -33,12 +35,12 @@ export const teams = pgTable('teams', {
 
 export const teamMembers = pgTable('team_members', {
   id: serial('id').primaryKey(),
-  userId: integer('user_id')
+  userId: uuid('user_id')
     .notNull()
-    .references(() => users.id),
+    .references(() => authUsers.id, { onDelete: 'cascade' }),
   teamId: integer('team_id')
     .notNull()
-    .references(() => teams.id),
+    .references(() => teams.id, { onDelete: 'cascade' }),
   role: varchar('role', { length: 50 }).notNull(),
   joinedAt: timestamp('joined_at').notNull().defaultNow(),
 });
@@ -47,8 +49,9 @@ export const activityLogs = pgTable('activity_logs', {
   id: serial('id').primaryKey(),
   teamId: integer('team_id')
     .notNull()
-    .references(() => teams.id),
-  userId: integer('user_id').references(() => users.id),
+    .references(() => teams.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id')
+      .references(() => authUsers.id, { onDelete: 'set null' }),
   action: text('action').notNull(),
   timestamp: timestamp('timestamp').notNull().defaultNow(),
   ipAddress: varchar('ip_address', { length: 45 }),
@@ -58,12 +61,12 @@ export const invitations = pgTable('invitations', {
   id: serial('id').primaryKey(),
   teamId: integer('team_id')
     .notNull()
-    .references(() => teams.id),
+    .references(() => teams.id, { onDelete: 'cascade' }),
   email: varchar('email', { length: 255 }).notNull(),
   role: varchar('role', { length: 50 }).notNull(),
-  invitedBy: integer('invited_by')
+  invitedBy: uuid('invited_by')
     .notNull()
-    .references(() => users.id),
+    .references(() => authUsers.id, { onDelete: 'cascade' }),
   invitedAt: timestamp('invited_at').notNull().defaultNow(),
   status: varchar('status', { length: 20 }).notNull().default('pending'),
 });
@@ -74,9 +77,11 @@ export const teamsRelations = relations(teams, ({ many }) => ({
   invitations: many(invitations),
 }));
 
-export const usersRelations = relations(users, ({ many }) => ({
-  teamMembers: many(teamMembers),
-  invitationsSent: many(invitations),
+export const profilesRelations = relations(profiles, ({ one }) => ({
+  user: one(authUsers, {
+    fields: [profiles.id],
+    references: [authUsers.id],
+  }),
 }));
 
 export const invitationsRelations = relations(invitations, ({ one }) => ({
@@ -84,16 +89,18 @@ export const invitationsRelations = relations(invitations, ({ one }) => ({
     fields: [invitations.teamId],
     references: [teams.id],
   }),
-  invitedBy: one(users, {
+  invitedByUser: one(authUsers, {
     fields: [invitations.invitedBy],
-    references: [users.id],
+    references: [authUsers.id],
+    relationName: 'InvitationInvitedBy',
   }),
 }));
 
 export const teamMembersRelations = relations(teamMembers, ({ one }) => ({
-  user: one(users, {
+  user: one(authUsers, {
     fields: [teamMembers.userId],
-    references: [users.id],
+    references: [authUsers.id],
+    relationName: 'TeamMemberUser',
   }),
   team: one(teams, {
     fields: [teamMembers.teamId],
@@ -106,25 +113,35 @@ export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
     fields: [activityLogs.teamId],
     references: [teams.id],
   }),
-  user: one(users, {
+  user: one(authUsers, {
     fields: [activityLogs.userId],
-    references: [users.id],
+    references: [authUsers.id],
+    relationName: 'ActivityLogUser',
   }),
 }));
 
-export type User = typeof users.$inferSelect;
-export type NewUser = typeof users.$inferInsert;
+export const authUsersRelations = relations(authUsers, ({ one }) => ({
+  profile: one(profiles, {
+    fields: [authUsers.id],
+    references: [profiles.id],
+    relationName: 'UserProfile'
+  }),
+}));
+
+export type Profile = typeof profiles.$inferSelect;
+export type NewProfile = typeof profiles.$inferInsert;
+
 export type Team = typeof teams.$inferSelect;
 export type NewTeam = typeof teams.$inferInsert;
 export type TeamMember = typeof teamMembers.$inferSelect;
 export type NewTeamMember = typeof teamMembers.$inferInsert;
 export type ActivityLog = typeof activityLogs.$inferSelect;
-export type NewActivityLog = typeof activityLogs.$inferInsert;
+export type NewActivityLog = Omit<typeof activityLogs.$inferInsert, 'userId'> & { userId: string };
 export type Invitation = typeof invitations.$inferSelect;
-export type NewInvitation = typeof invitations.$inferInsert;
+export type NewInvitation = Omit<typeof invitations.$inferInsert, 'invitedBy'> & { invitedBy: string };
+
 export type TeamDataWithMembers = Team & {
   teamMembers: (TeamMember & {
-    user: Pick<User, 'id' | 'name' | 'email'>;
   })[];
 };
 

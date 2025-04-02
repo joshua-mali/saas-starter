@@ -1,8 +1,8 @@
-import './globals.css';
+import SupabaseListener from '@/components/supabase-listener';
+import { createClient } from '@/lib/supabase/server';
 import type { Metadata, Viewport } from 'next';
 import { Manrope } from 'next/font/google';
-import { UserProvider } from '@/lib/auth';
-import { getUser } from '@/lib/db/queries';
+import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Next.js SaaS Starter',
@@ -10,17 +10,21 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
   maximumScale: 1,
+  userScalable: false,
 };
 
 const manrope = Manrope({ subsets: ['latin'] });
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  let userPromise = getUser();
+  const supabase = await createClient();
+  const { data: { session } } = await supabase.auth.getSession();
 
   return (
     <html
@@ -28,7 +32,8 @@ export default function RootLayout({
       className={`bg-white dark:bg-gray-950 text-black dark:text-white ${manrope.className}`}
     >
       <body className="min-h-[100dvh] bg-gray-50">
-        <UserProvider userPromise={userPromise}>{children}</UserProvider>
+        <SupabaseListener serverAccessToken={session?.access_token} />
+        {children}
       </body>
     </html>
   );

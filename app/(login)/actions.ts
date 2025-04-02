@@ -1,32 +1,26 @@
 'use server';
 
 import {
-  validatedAction,
-  validatedActionWithUser,
+  validatedAction
 } from '@/lib/auth/middleware';
-import { comparePasswords, hashPassword, setSession } from '@/lib/auth/session';
 import { db } from '@/lib/db/drizzle';
-import { getUser, getUserWithTeam } from '@/lib/db/queries';
 import {
   activityLogs,
   ActivityType,
   invitations,
+  profiles,
   teamMembers,
-  teams,
-  User,
-  users,
-  type NewActivityLog
+  type NewActivityLog,
+  type TeamMember
 } from '@/lib/db/schema';
-import { createCheckoutSession } from '@/lib/payments/stripe';
 import { createClient } from '@/lib/supabase/server';
-import { and, eq, sql } from 'drizzle-orm';
-import { cookies } from 'next/headers';
+import { and, eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 async function logActivity(
   teamId: number | null | undefined,
-  userId: number,
+  userId: string,
   type: ActivityType,
   ipAddress?: string,
 ) {
@@ -49,52 +43,43 @@ const signInSchema = z.object({
 
 export const signIn = validatedAction(signInSchema, async (data, formData) => {
   const { email, password } = data;
+  const supabase = await createClient();
 
-  const userWithTeam = await db
-    .select({
-      user: users,
-      team: teams,
-    })
-    .from(users)
-    .leftJoin(teamMembers, eq(users.id, teamMembers.userId))
-    .leftJoin(teams, eq(teamMembers.teamId, teams.id))
-    .where(eq(users.email, email))
-    .limit(1);
-
-  if (userWithTeam.length === 0) {
-    return {
-      error: 'Invalid email or password. Please try again.',
-      email,
-      password,
-    };
-  }
-
-  const { user: foundUser, team: foundTeam } = userWithTeam[0];
-
-  const isPasswordValid = await comparePasswords(
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
     password,
-    foundUser.passwordHash,
-  );
+  });
 
-  if (!isPasswordValid) {
+  if (error) {
+    // Log the error for debugging
+    console.error("Supabase sign in error:", error);
+    // Provide a generic error message to the user
     return {
       error: 'Invalid email or password. Please try again.',
-      email,
-      password,
+      email, // Keep email in state for the form
+      password: '', // Clear password field
     };
   }
 
-  await Promise.all([
-    setSession(foundUser),
-    logActivity(foundTeam?.id, foundUser.id, ActivityType.SIGN_IN),
-  ]);
+  // Remove custom session setting and activity logging for now
+  // const userWithTeam = await db... // No need to query user/team here
+  // await Promise.all([
+  //   setSession(foundUser), // Supabase handles sessions via cookies
+  //   logActivity(foundTeam?.id, foundUser.id, ActivityType.SIGN_IN), // Decide if/how to log activity with Supabase user ID
+  // ]);
 
   const redirectTo = formData.get('redirect') as string | null;
-  if (redirectTo === 'checkout') {
-    const priceId = formData.get('priceId') as string;
-    return createCheckoutSession({ team: foundTeam, priceId });
-  }
+  // TODO: Re-evaluate checkout flow. We need the team context after Supabase sign-in.
+  // For now, redirect directly to dashboard.
+  // if (redirectTo === 'checkout') {
+  //   const priceId = formData.get('priceId') as string;
+  //   const { data: { user } } = await supabase.auth.getUser();
+  //   // Need to fetch team associated with the Supabase user ID here
+  //   // const team = await getTeamForUser(user.id); // This assumes getTeamForUser works with Supabase user ID
+  //   // return createCheckoutSession({ team: team, priceId });
+  // }
 
+  // Redirect to dashboard after successful Supabase sign-in
   redirect('/dashboard');
 });
 
@@ -148,101 +133,154 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
 });
 
 export async function signOut() {
-  const user = (await getUser()) as User;
-  const userWithTeam = await getUserWithTeam(user.id);
-  await logActivity(userWithTeam?.teamId, user.id, ActivityType.SIGN_OUT);
-  (await cookies()).delete('session');
+  // Remove old logic relying on custom session/getUser
+  // const user = (await getUser()) as User;
+  // const userWithTeam = await getUserWithTeam(user.id);
+  // await logActivity(userWithTeam?.teamId, user.id, ActivityType.SIGN_OUT);
+  // (await cookies()).delete('session');
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signOut();
+
+  if (error) {
+    console.error('Error signing out:', error);
+    // Optionally return an error state if this action is called from a form
+    // return { error: 'Failed to sign out.' };
+  }
+
+  // Redirect to the sign-in page after successful sign out
+  redirect('/sign-in');
 }
 
 const updatePasswordSchema = z
   .object({
-    currentPassword: z.string().min(8).max(100),
+    // currentPassword is not needed for supabase.auth.updateUser
+    // currentPassword: z.string().min(8).max(100),
     newPassword: z.string().min(8).max(100),
     confirmPassword: z.string().min(8).max(100),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
     message: "Passwords don't match",
-    path: ['confirmPassword'],
+    path: ['confirmPassword'], // Apply validation to confirmPassword field
   });
 
-export const updatePassword = validatedActionWithUser(
+export const updatePassword = validatedAction(
   updatePasswordSchema,
-  async (data, _, user) => {
-    const { currentPassword, newPassword } = data;
+  // Remove the old user parameter from the function signature
+  async (data, formData) => {
+    // const { currentPassword, newPassword } = data; // currentPassword not needed
+    const { newPassword } = data;
+    const supabase = await createClient();
 
-    const isPasswordValid = await comparePasswords(
-      currentPassword,
-      user.passwordHash,
-    );
+    // 1. Get the current Supabase user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-    if (!isPasswordValid) {
-      return { error: 'Current password is incorrect.' };
+    if (authError || !user) {
+      return { error: 'User not authenticated. Please sign in again.' };
     }
 
-    if (currentPassword === newPassword) {
-      return {
-        error: 'New password must be different from the current password.',
-      };
+    // 2. Call Supabase to update the user's password
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (updateError) {
+      console.error("Supabase password update error:", updateError);
+      // Provide a more specific error if possible, otherwise generic
+      return { error: updateError.message || 'Failed to update password. Please try again.' };
     }
 
-    const newPasswordHash = await hashPassword(newPassword);
-    const userWithTeam = await getUserWithTeam(user.id);
+    // Remove old password comparison and hashing
+    // const isPasswordValid = await comparePasswords(...);
+    // const newPasswordHash = await hashPassword(newPassword);
+    // const userWithTeam = await getUserWithTeam(user.id);
 
-    await Promise.all([
-      db
-        .update(users)
-        .set({ passwordHash: newPasswordHash })
-        .where(eq(users.id, user.id)),
-      logActivity(userWithTeam?.teamId, user.id, ActivityType.UPDATE_PASSWORD),
-    ]);
+    // Remove direct DB update for passwordHash
+    // await Promise.all([
+    //   db
+    //     .update(users)
+    //     .set({ passwordHash: newPasswordHash })
+    //     .where(eq(users.id, user.id)),
+    //   logActivity(userWithTeam?.teamId, user.id, ActivityType.UPDATE_PASSWORD),
+    // ]);
+
+    // TODO: Re-implement activity logging if needed
+    // Need to fetch team info based on Supabase user.id first
+    // const userWithTeam = await getTeamForSupabaseUser(user.id); // Example function
+    // await logActivity(userWithTeam?.teamId, user.id, ActivityType.UPDATE_PASSWORD);
 
     return { success: 'Password updated successfully.' };
   },
 );
 
 const deleteAccountSchema = z.object({
-  password: z.string().min(8).max(100),
+  // No password needed for this refactored version
 });
 
-export const deleteAccount = validatedActionWithUser(
+export const deleteAccount = validatedAction(
   deleteAccountSchema,
-  async (data, _, user) => {
-    const { password } = data;
+  // Remove old user parameter
+  async (data, formData) => {
+    const supabase = await createClient();
 
-    const isPasswordValid = await comparePasswords(password, user.passwordHash);
-    if (!isPasswordValid) {
-      return { error: 'Incorrect password. Account deletion failed.' };
+    // 1. Get the current Supabase user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return { error: 'User not authenticated. Please sign in again.' };
     }
 
-    const userWithTeam = await getUserWithTeam(user.id);
+    // Remove old password check
 
-    await logActivity(
-      userWithTeam?.teamId,
-      user.id,
-      ActivityType.DELETE_ACCOUNT,
-    );
+    // 2. Perform Application-Level Cleanup (using Supabase user ID)
+    let teamId: number | null = null;
+    try {
+      // Find the user's team membership to get teamId for logging/cleanup
+      const [membership] = await db
+        .select({ teamId: teamMembers.teamId })
+        .from(teamMembers)
+        .where(eq(teamMembers.userId, user.id)) // Use Supabase user ID (UUID) - Should work now
+        .limit(1);
 
-    // Soft delete
-    await db
-      .update(users)
-      .set({
-        deletedAt: sql`CURRENT_TIMESTAMP`,
-        email: sql`CONCAT(email, '-', id, '-deleted')`, // Ensure email uniqueness
-      })
-      .where(eq(users.id, user.id));
+      if (membership) {
+        teamId = membership.teamId;
+        // Delete from teamMembers table
+        await db
+          .delete(teamMembers)
+          .where(eq(teamMembers.userId, user.id)); // Use Supabase user ID (UUID) - Should work now
+      }
 
-    if (userWithTeam?.teamId) {
-      await db
-        .delete(teamMembers)
-        .where(
-          and(
-            eq(teamMembers.userId, user.id),
-            eq(teamMembers.teamId, userWithTeam.teamId),
-          ),
-        );
+      // Delete user profile data
+      await db.delete(profiles).where(eq(profiles.id, user.id)); // Use Supabase user ID (UUID)
+
+      // TODO: Add deletion logic for other related application tables?
+
+    } catch (dbError) {
+      console.error("Database error during account cleanup:", dbError);
+      // return { error: "Failed to clean up account data." }; // Decide on error handling
     }
 
-    (await cookies()).delete('session');
+    // Remove old soft delete logic on public.users table
+
+    // 3. Log activity (if cleanup was successful or regardless)
+    if (teamId) {
+      await logActivity(
+        teamId,
+        user.id, // Use Supabase UUID
+        ActivityType.DELETE_ACCOUNT,
+      );
+    }
+
+    // 4. Sign the user out from Supabase
+    const { error: signOutError } = await supabase.auth.signOut();
+
+    if (signOutError) {
+      console.error("Supabase sign out error during account deletion:", signOutError);
+    }
+
+    // Remove old cookie deletion
+
+    // 5. Redirect to sign-in page
     redirect('/sign-in');
   },
 );
@@ -252,47 +290,136 @@ const updateAccountSchema = z.object({
   email: z.string().email('Invalid email address'),
 });
 
-export const updateAccount = validatedActionWithUser(
+export const updateAccount = validatedAction(
   updateAccountSchema,
-  async (data, _, user) => {
+  async (data, formData) => {
     const { name, email } = data;
-    const userWithTeam = await getUserWithTeam(user.id);
+    const supabase = await createClient();
 
-    await Promise.all([
-      db.update(users).set({ name, email }).where(eq(users.id, user.id)),
-      logActivity(userWithTeam?.teamId, user.id, ActivityType.UPDATE_ACCOUNT),
-    ]);
+    // 1. Get the current Supabase user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-    return { success: 'Account updated successfully.' };
+    if (authError || !user) {
+      return { error: 'User not authenticated. Please sign in again.' };
+    }
+
+    // 2. Prepare update data for Supabase
+    const updateData: { email?: string; data?: { name: string } } = {};
+    let successMessage = 'Account updated successfully.';
+
+    // Check if email needs updating
+    if (email && email !== user.email) {
+      updateData.email = email;
+      successMessage = 'Account details updated. Please check your new email address for a confirmation link.';
+    }
+
+    // Update name in user_metadata
+    updateData.data = { name };
+
+    // 3. Call Supabase to update user email and/or metadata
+    const { error: updateError } = await supabase.auth.updateUser(updateData);
+
+    if (updateError) {
+      console.error("Supabase account update error:", updateError);
+      return { error: updateError.message || 'Failed to update account. Please try again.' };
+    }
+
+    // Remove old DB update logic
+    // const userWithTeam = await getUserWithTeam(user.id);
+    // await Promise.all([
+    //   db.update(users).set({ name, email }).where(eq(users.id, user.id)),
+    //   logActivity(userWithTeam?.teamId, user.id, ActivityType.UPDATE_ACCOUNT),
+    // ]);
+
+    // TODO: Re-implement activity logging if needed
+    // Need to fetch team info based on Supabase user.id first
+    // const userWithTeam = await getTeamForSupabaseUser(user.id); // Example function
+    // await logActivity(userWithTeam?.teamId, user.id, ActivityType.UPDATE_ACCOUNT);
+
+    return { success: successMessage };
   },
 );
 
 const removeTeamMemberSchema = z.object({
-  memberId: z.number(),
+  memberId: z.number(), // Corresponds to teamMembers.id (serial)
 });
 
-export const removeTeamMember = validatedActionWithUser(
+export const removeTeamMember = validatedAction(
   removeTeamMemberSchema,
-  async (data, _, user) => {
+  // Remove old user parameter
+  async (data, formData) => {
     const { memberId } = data;
-    const userWithTeam = await getUserWithTeam(user.id);
+    const supabase = await createClient();
 
-    if (!userWithTeam?.teamId) {
-      return { error: 'User is not part of a team' };
+    // 1. Get the *acting* Supabase user
+    const { data: { user: actingUser }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !actingUser) {
+      return { error: 'User not authenticated' };
     }
 
-    await db
-      .delete(teamMembers)
-      .where(
-        and(
-          eq(teamMembers.id, memberId),
-          eq(teamMembers.teamId, userWithTeam.teamId),
-        ),
-      );
+    // 2. Get acting user's membership info (teamId, role)
+    let actingUserMembership: Pick<TeamMember, 'teamId' | 'role'> | undefined;
+    try {
+      [actingUserMembership] = await db
+        .select({ teamId: teamMembers.teamId, role: teamMembers.role })
+        .from(teamMembers)
+        .where(eq(teamMembers.userId, actingUser.id)) // Use Supabase UUID
+        .limit(1);
+    } catch (dbError) {
+      console.error("Database error fetching acting user membership:", dbError);
+      return { error: "Database error checking permissions." };
+    }
 
+    if (!actingUserMembership?.teamId) {
+      return { error: 'Acting user is not part of a team' };
+    }
+
+    // 3. Permission Check: Ensure acting user is an owner
+    if (actingUserMembership.role !== 'owner') {
+      return { error: 'Only team owners can remove members.' };
+    }
+
+    // 4. Verify the target member exists and belongs to the *same team*
+    let targetMembership: Pick<TeamMember, 'teamId' | 'userId'> | undefined;
+    try {
+        [targetMembership] = await db
+            .select({ teamId: teamMembers.teamId, userId: teamMembers.userId })
+            .from(teamMembers)
+            .where(eq(teamMembers.id, memberId)) // Find by the memberId (integer PK)
+            .limit(1);
+    } catch (dbError) {
+        console.error("Database error fetching target member:", dbError);
+        return { error: "Database error finding member to remove." };
+    }
+
+    if (!targetMembership) {
+        return { error: "Team member not found." };
+    }
+
+    if (targetMembership.teamId !== actingUserMembership.teamId) {
+        return { error: "Cannot remove a member from another team." };
+    }
+
+    // Prevent owner from removing themselves via this action?
+    if (targetMembership.userId === actingUser.id) {
+        return { error: "Cannot remove yourself from the team via this action." };
+    }
+
+    // 5. Delete the target member
+    try {
+      await db
+        .delete(teamMembers)
+        .where(eq(teamMembers.id, memberId));
+    } catch (dbError) {
+      console.error("Database error removing team member:", dbError);
+      return { error: "Failed to remove team member." };
+    }
+
+    // 6. Log activity
     await logActivity(
-      userWithTeam.teamId,
-      user.id,
+      actingUserMembership.teamId,
+      actingUser.id, // Logged-in user performing the action
       ActivityType.REMOVE_TEAM_MEMBER,
     );
 
@@ -305,24 +432,54 @@ const inviteTeamMemberSchema = z.object({
   role: z.enum(['member', 'owner']),
 });
 
-export const inviteTeamMember = validatedActionWithUser(
+export const inviteTeamMember = validatedAction(
   inviteTeamMemberSchema,
-  async (data, _, user) => {
-    const { email, role } = data;
-    const userWithTeam = await getUserWithTeam(user.id);
+  // Remove old user parameter
+  async (data, formData) => {
+    const { email, role: invitedRole } = data; // Renamed role
+    const supabase = await createClient();
 
-    if (!userWithTeam?.teamId) {
-      return { error: 'User is not part of a team' };
+    // 1. Get the *acting* Supabase user
+    const { data: { user: inviterUser }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !inviterUser) {
+      return { error: 'User not authenticated' };
     }
 
+    // 2. Get acting user's membership info (teamId, role)
+    let inviterMembership: Pick<TeamMember, 'teamId' | 'role'> | undefined;
+    try {
+      [inviterMembership] = await db
+        .select({ teamId: teamMembers.teamId, role: teamMembers.role })
+        .from(teamMembers)
+        .where(eq(teamMembers.userId, inviterUser.id)) // Use Supabase UUID
+        .limit(1);
+    } catch (dbError) {
+      console.error("Database error fetching inviter membership:", dbError);
+      return { error: "Database error checking permissions." };
+    }
+
+    if (!inviterMembership?.teamId) {
+      return { error: 'Inviting user is not part of a team' };
+    }
+
+    // 3. Permission Check: Ensure acting user is an owner
+    if (inviterMembership.role !== 'owner') {
+      return { error: 'Only team owners can invite new members.' };
+    }
+
+    const inviterTeamId = inviterMembership.teamId;
+
+    // 4. Remove check for existing members via email (using deprecated users table)
+    /*
     const existingMember = await db
       .select()
-      .from(users)
+      .from(users) // <-- Deprecated table
       .leftJoin(teamMembers, eq(users.id, teamMembers.userId))
       .where(
         and(
           eq(users.email, email),
-          eq(teamMembers.teamId, userWithTeam.teamId),
+          eq(teamMembers.teamId, inviterTeamId),
         ),
       )
       .limit(1);
@@ -330,41 +487,53 @@ export const inviteTeamMember = validatedActionWithUser(
     if (existingMember.length > 0) {
       return { error: 'User is already a member of this team' };
     }
+    */
 
-    // Check if there's an existing invitation
-    const existingInvitation = await db
-      .select()
-      .from(invitations)
-      .where(
-        and(
-          eq(invitations.email, email),
-          eq(invitations.teamId, userWithTeam.teamId),
-          eq(invitations.status, 'pending'),
-        ),
-      )
-      .limit(1);
+    // 5. Check if there's an existing PENDING invitation for this email in THIS team
+    try {
+      const existingInvitation = await db
+        .select({ id: invitations.id })
+        .from(invitations)
+        .where(
+          and(
+            eq(invitations.email, email),
+            eq(invitations.teamId, inviterTeamId),
+            eq(invitations.status, 'pending'),
+          ),
+        )
+        .limit(1);
 
-    if (existingInvitation.length > 0) {
-      return { error: 'An invitation has already been sent to this email' };
+      if (existingInvitation.length > 0) {
+        return { error: 'An invitation has already been sent to this email for this team' };
+      }
+    } catch (dbError) {
+      console.error("Database error checking existing invitations:", dbError);
+      return { error: "Database error checking invitations." };
     }
 
-    // Create a new invitation
-    await db.insert(invitations).values({
-      teamId: userWithTeam.teamId,
-      email,
-      role,
-      invitedBy: user.id,
-      status: 'pending',
-    });
+    // 6. Create a new invitation
+    try {
+      await db.insert(invitations).values({
+        teamId: inviterTeamId,
+        email,
+        role: invitedRole,
+        invitedBy: inviterUser.id, // Use Supabase UUID
+        status: 'pending',
+      });
+    } catch (dbError) {
+       console.error("Database error creating invitation:", dbError);
+       return { error: "Database error creating invitation." };
+    }
 
+    // 7. Log Activity
     await logActivity(
-      userWithTeam.teamId,
-      user.id,
+      inviterTeamId,
+      inviterUser.id, // Use Supabase UUID
       ActivityType.INVITE_TEAM_MEMBER,
     );
 
-    // TODO: Send invitation email and include ?inviteId={id} to sign-up URL
-    // await sendInvitationEmail(email, userWithTeam.team.name, role)
+    // TODO: Send invitation email (this logic remains separate)
+    // await sendInvitationEmail(email, teamName, invitedRole)
 
     return { success: 'Invitation sent successfully' };
   },

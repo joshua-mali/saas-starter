@@ -1,20 +1,21 @@
 'use client';
 
+import { inviteTeamMember } from '@/app/(login)/actions';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Card,
   CardContent,
+  CardFooter,
   CardHeader,
-  CardTitle,
-  CardFooter
+  CardTitle
 } from '@/components/ui/card';
-import { Loader2, PlusCircle } from 'lucide-react';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { use, useActionState } from 'react';
-import { inviteTeamMember } from '@/app/(login)/actions';
-import { useUser } from '@/lib/auth';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { createClient } from '@/lib/supabase/client';
+import type { User } from '@supabase/supabase-js';
+import { Loader2, PlusCircle } from 'lucide-react';
+import { useActionState, useEffect, useState } from 'react';
 
 type ActionState = {
   error?: string;
@@ -22,13 +23,55 @@ type ActionState = {
 };
 
 export function InviteTeamMember() {
-  const { userPromise } = useUser();
-  const user = use(userPromise);
-  const isOwner = user?.role === 'owner';
+  const [user, setUser] = useState<User | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
   const [inviteState, inviteAction, isInvitePending] = useActionState<
     ActionState,
     FormData
   >(inviteTeamMember, { error: '', success: '' });
+
+  const supabase = createClient();
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const { data: { user: fetchedUser }, error: userError } = await supabase.auth.getUser();
+        if (userError) throw userError;
+        setUser(fetchedUser);
+
+        if (fetchedUser) {
+          console.warn("TODO: Implement fetching user role in InviteTeamMember component.");
+        } else {
+          setUserRole(null);
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+        setUser(null);
+        setUserRole(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [supabase]);
+
+  const isOwner = userRole === 'owner';
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Invite Team Member</CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center justify-center h-20">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -45,7 +88,7 @@ export function InviteTeamMember() {
               type="email"
               placeholder="Enter email"
               required
-              disabled={!isOwner}
+              disabled={!isOwner || isInvitePending}
             />
           </div>
           <div>
@@ -54,7 +97,7 @@ export function InviteTeamMember() {
               defaultValue="member"
               name="role"
               className="flex space-x-4"
-              disabled={!isOwner}
+              disabled={!isOwner || isInvitePending}
             >
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="member" id="member" />
@@ -91,7 +134,7 @@ export function InviteTeamMember() {
           </Button>
         </form>
       </CardContent>
-      {!isOwner && (
+      {!isOwner && !loading && (
         <CardFooter>
           <p className="text-sm text-muted-foreground">
             You must be a team owner to invite new members.

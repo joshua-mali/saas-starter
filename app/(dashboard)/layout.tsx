@@ -1,30 +1,60 @@
 'use client';
 
-import Link from 'next/link';
-import { use, useState, Suspense } from 'react';
+import { signOut } from '@/app/(login)/actions';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { CircleIcon, Home, LogOut } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { useUser } from '@/lib/auth';
-import { signOut } from '@/app/(login)/actions';
+import { createClient } from '@/lib/supabase/client';
+import type { User } from '@supabase/supabase-js';
+import { CircleIcon, Home, LogOut } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 
 function UserMenu() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { userPromise } = useUser();
-  const user = use(userPromise);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const supabase = createClient();
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const { data: { user: fetchedUser } } = await supabase.auth.getUser();
+        setUser(fetchedUser);
+      } catch (error) {
+        console.error("Error fetching user:", error);
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchUser();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        const { data: { user: updatedUser } } = await supabase.auth.getUser();
+        setUser(updatedUser);
+      }
+    );
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+  }, [supabase]);
 
   async function handleSignOut() {
     await signOut();
-    router.refresh();
-    router.push('/');
+  }
+
+  if (loading) {
+    return <div className="h-9 w-9 rounded-full bg-gray-200 animate-pulse" />;
   }
 
   if (!user) {
@@ -46,16 +76,20 @@ function UserMenu() {
     );
   }
 
+  const userName = user.user_metadata?.name || user.email;
+  const userInitials = userName
+    ?.split(' ')
+    .map((n: string) => n[0])
+    .join('')
+    .toUpperCase() || '';
+
   return (
     <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
       <DropdownMenuTrigger>
         <Avatar className="cursor-pointer size-9">
-          <AvatarImage alt={user.name || ''} />
+          <AvatarImage src={user.user_metadata?.avatar_url} alt={userName || ''} />
           <AvatarFallback>
-            {user.email
-              .split(' ')
-              .map((n) => n[0])
-              .join('')}
+            {userInitials}
           </AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
@@ -66,14 +100,10 @@ function UserMenu() {
             <span>Dashboard</span>
           </Link>
         </DropdownMenuItem>
-        <form action={handleSignOut} className="w-full">
-          <button type="submit" className="flex w-full">
-            <DropdownMenuItem className="w-full flex-1 cursor-pointer">
-              <LogOut className="mr-2 h-4 w-4" />
-              <span>Sign out</span>
-            </DropdownMenuItem>
-          </button>
-        </form>
+        <DropdownMenuItem onClick={handleSignOut} className="w-full flex-1 cursor-pointer">
+          <LogOut className="mr-2 h-4 w-4" />
+          <span>Sign out</span>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -88,7 +118,7 @@ function Header() {
           <span className="ml-2 text-xl font-semibold text-gray-900">ACME</span>
         </Link>
         <div className="flex items-center space-x-4">
-          <Suspense fallback={<div className="h-9" />}>
+          <Suspense fallback={<div className="h-9 w-9 rounded-full bg-gray-200 animate-pulse" />}>
             <UserMenu />
           </Suspense>
         </div>

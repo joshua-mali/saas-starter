@@ -1,26 +1,42 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
+import { removeTeamMember } from '@/app/(login)/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import type { Team, TeamMember } from '@/lib/db/schema';
 import { customerPortalAction } from '@/lib/payments/actions';
 import { useActionState } from 'react';
-import { TeamDataWithMembers, User } from '@/lib/db/schema';
-import { removeTeamMember } from '@/app/(login)/actions';
 import { InviteTeamMember } from './invite-team';
+
+type DisplayUser = {
+  id: string;
+  name: string | null;
+  email: string | undefined | null;
+};
+
+type MemberWithDisplayUser = TeamMember & {
+  user: DisplayUser;
+};
+
+type SettingsProps = {
+  teamData: Team & {
+    teamMembers: MemberWithDisplayUser[];
+  };
+};
 
 type ActionState = {
   error?: string;
   success?: string;
 };
 
-export function Settings({ teamData }: { teamData: TeamDataWithMembers }) {
+export function Settings({ teamData }: SettingsProps) {
   const [removeState, removeAction, isRemovePending] = useActionState<
     ActionState,
     FormData
   >(removeTeamMember, { error: '', success: '' });
 
-  const getUserDisplayName = (user: Pick<User, 'id' | 'name' | 'email'>) => {
+  const getUserDisplayName = (user: DisplayUser) => {
     return user.name || user.email || 'Unknown User';
   };
 
@@ -72,7 +88,7 @@ export function Settings({ teamData }: { teamData: TeamDataWithMembers }) {
                     <AvatarFallback>
                       {getUserDisplayName(member.user)
                         .split(' ')
-                        .map((n) => n[0])
+                        .map((n: string) => n[0])
                         .join('')}
                     </AvatarFallback>
                   </Avatar>
@@ -85,7 +101,7 @@ export function Settings({ teamData }: { teamData: TeamDataWithMembers }) {
                     </p>
                   </div>
                 </div>
-                {index > 1 ? (
+                {teamData.teamMembers.length > 1 && member.role !== 'owner' && (
                   <form action={removeAction}>
                     <input type="hidden" name="memberId" value={member.id} />
                     <Button
@@ -97,7 +113,7 @@ export function Settings({ teamData }: { teamData: TeamDataWithMembers }) {
                       {isRemovePending ? 'Removing...' : 'Remove'}
                     </Button>
                   </form>
-                ) : null}
+                )}
               </li>
             ))}
           </ul>

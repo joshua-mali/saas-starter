@@ -1,11 +1,11 @@
-import Stripe from 'stripe';
-import { redirect } from 'next/navigation';
-import { Team } from '@/lib/db/schema';
 import {
   getTeamByStripeCustomerId,
-  getUser,
   updateTeamSubscription
 } from '@/lib/db/queries';
+import { Team } from '@/lib/db/schema';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
+import { redirect } from 'next/navigation';
+import Stripe from 'stripe';
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-02-24.acacia'
@@ -13,15 +13,15 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 
 export async function createCheckoutSession({
   team,
-  priceId
+  priceId,
+  user
 }: {
   team: Team | null;
   priceId: string;
+  user: SupabaseUser | null;
 }) {
-  const user = await getUser();
-
   if (!team || !user) {
-    redirect(`/sign-up?redirect=checkout&priceId=${priceId}`);
+    redirect(`/sign-in?redirect=checkout&priceId=${priceId}`);
   }
 
   const session = await stripe.checkout.sessions.create({
@@ -36,7 +36,7 @@ export async function createCheckoutSession({
     success_url: `${process.env.BASE_URL}/api/stripe/checkout?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${process.env.BASE_URL}/pricing`,
     customer: team.stripeCustomerId || undefined,
-    client_reference_id: user.id.toString(),
+    client_reference_id: user.id,
     allow_promotion_codes: true,
     subscription_data: {
       trial_period_days: 14
