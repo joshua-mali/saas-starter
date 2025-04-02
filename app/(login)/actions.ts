@@ -1,30 +1,28 @@
 'use server';
 
-import { z } from 'zod';
-import { and, eq, sql } from 'drizzle-orm';
-import { db } from '@/lib/db/drizzle';
-import {
-  User,
-  users,
-  teams,
-  teamMembers,
-  activityLogs,
-  type NewUser,
-  type NewTeam,
-  type NewTeamMember,
-  type NewActivityLog,
-  ActivityType,
-  invitations,
-} from '@/lib/db/schema';
-import { comparePasswords, hashPassword, setSession } from '@/lib/auth/session';
-import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
-import { createCheckoutSession } from '@/lib/payments/stripe';
-import { getUser, getUserWithTeam } from '@/lib/db/queries';
 import {
   validatedAction,
   validatedActionWithUser,
 } from '@/lib/auth/middleware';
+import { comparePasswords, hashPassword, setSession } from '@/lib/auth/session';
+import { db } from '@/lib/db/drizzle';
+import { getUser, getUserWithTeam } from '@/lib/db/queries';
+import {
+  activityLogs,
+  ActivityType,
+  invitations,
+  teamMembers,
+  teams,
+  User,
+  users,
+  type NewActivityLog
+} from '@/lib/db/schema';
+import { createCheckoutSession } from '@/lib/payments/stripe';
+import { createClient } from '@/lib/supabase/server';
+import { and, eq, sql } from 'drizzle-orm';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+import { z } from 'zod';
 
 async function logActivity(
   teamId: number | null | undefined,
@@ -108,117 +106,45 @@ const signUpSchema = z.object({
 
 export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   const { email, password, inviteId } = data;
+  const supabase = await createClient();
 
-  const existingUser = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
+  // TODO: Handle inviteId logic separately after email verification,
+  // potentially using Supabase functions or a separate step in the app.
 
-  if (existingUser.length > 0) {
-    return {
-      error: 'Failed to create user. Please try again.',
-      email,
-      password,
-    };
-  }
-
-  const passwordHash = await hashPassword(password);
-
-  const newUser: NewUser = {
+  const {
+    data: {
+      user
+    },
+    error
+  } = await supabase.auth.signUp({
     email,
-    passwordHash,
-    role: 'owner', // Default role, will be overridden if there's an invitation
-  };
+    password,
+    options: {
+      // Optional: Add email redirect URL for verification link
+      // emailRedirectTo: `${origin}/auth/callback`
+    },
+  });
 
-  const [createdUser] = await db.insert(users).values(newUser).returning();
-
-  if (!createdUser) {
+  if (error) {
+    console.error('Supabase sign up error:', error);
     return {
-      error: 'Failed to create user. Please try again.',
+      error: error.message || 'Failed to sign up. Please try again.',
       email,
       password,
     };
   }
 
-  let teamId: number;
-  let userRole: string;
-  let createdTeam: typeof teams.$inferSelect | null = null;
+  // Don't log in the user or create teams/members automatically here.
+  // User needs to verify their email first.
+  // Team association logic should happen after verification.
 
-  if (inviteId) {
-    // Check if there's a valid invitation
-    const [invitation] = await db
-      .select()
-      .from(invitations)
-      .where(
-        and(
-          eq(invitations.id, parseInt(inviteId)),
-          eq(invitations.email, email),
-          eq(invitations.status, 'pending'),
-        ),
-      )
-      .limit(1);
+  // Remove automatic redirection and session setting
+  // redirect('/dashboard');
 
-    if (invitation) {
-      teamId = invitation.teamId;
-      userRole = invitation.role;
-
-      await db
-        .update(invitations)
-        .set({ status: 'accepted' })
-        .where(eq(invitations.id, invitation.id));
-
-      await logActivity(teamId, createdUser.id, ActivityType.ACCEPT_INVITATION);
-
-      [createdTeam] = await db
-        .select()
-        .from(teams)
-        .where(eq(teams.id, teamId))
-        .limit(1);
-    } else {
-      return { error: 'Invalid or expired invitation.', email, password };
-    }
-  } else {
-    // Create a new team if there's no invitation
-    const newTeam: NewTeam = {
-      name: `${email}'s Team`,
-    };
-
-    [createdTeam] = await db.insert(teams).values(newTeam).returning();
-
-    if (!createdTeam) {
-      return {
-        error: 'Failed to create team. Please try again.',
-        email,
-        password,
-      };
-    }
-
-    teamId = createdTeam.id;
-    userRole = 'owner';
-
-    await logActivity(teamId, createdUser.id, ActivityType.CREATE_TEAM);
-  }
-
-  const newTeamMember: NewTeamMember = {
-    userId: createdUser.id,
-    teamId: teamId,
-    role: userRole,
+  return {
+    success: 'Sign up successful! Please check your email for a verification link.',
+    email, // Keep email in state if needed by the form
   };
-
-  await Promise.all([
-    db.insert(teamMembers).values(newTeamMember),
-    logActivity(teamId, createdUser.id, ActivityType.SIGN_UP),
-    setSession(createdUser),
-  ]);
-
-  const redirectTo = formData.get('redirect') as string | null;
-  if (redirectTo === 'checkout') {
-    const priceId = formData.get('priceId') as string;
-    return createCheckoutSession({ team: createdTeam, priceId });
-  }
-
-  redirect('/dashboard');
 });
 
 export async function signOut() {
