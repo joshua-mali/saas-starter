@@ -3,143 +3,153 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ActionState } from '@/lib/auth/middleware';
-import { CircleIcon, Loader2 } from 'lucide-react';
+import { type ActionState } from '@/lib/auth/middleware';
+import { Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useActionState } from 'react';
 import { signIn, signUp } from './actions';
 
-export function Login({ mode = 'signin' }: { mode?: 'signin' | 'signup' }) {
+// Extend props for Login component
+interface LoginProps {
+  mode?: 'signup' | 'signin';
+  inviteToken?: string;
+  teamId?: string;
+  role?: string;
+}
+
+// Initial state definition matching ActionState (or a subset)
+const initialState: ActionState = { error: '' };
+
+export function Login({ mode = 'signin', inviteToken, teamId, role }: LoginProps) {
   const searchParams = useSearchParams();
-  const redirect = searchParams.get('redirect');
+  const redirectParam = searchParams.get('redirect');
   const priceId = searchParams.get('priceId');
-  const inviteId = searchParams.get('inviteId');
+  // inviteId from params seems redundant if we have inviteToken
+  // const inviteId = searchParams.get('inviteId');
+
+  const isSignUp = mode === 'signup';
+  const actionToUse = isSignUp ? signUp : signIn;
+
+  // Use useActionState
   const [state, formAction, pending] = useActionState<ActionState, FormData>(
-    mode === 'signin' ? signIn : signUp,
-    { error: '' },
+    actionToUse,
+    initialState,
   );
 
   return (
-    <div className="min-h-[100dvh] flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex justify-center">
-          <CircleIcon className="h-12 w-12 text-orange-500" />
-        </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          {mode === 'signin'
-            ? 'Sign in to your account'
-            : 'Create your account'}
+    <div className="flex min-h-full flex-1 flex-col justify-center px-6 py-12 lg:px-8">
+       <div className="sm:mx-auto sm:w-full sm:max-w-sm">
+        {/* Placeholder for Logo */}
+         <img className="mx-auto h-10 w-auto" src="https://tailwindui.com/img/logos/mark.svg?color=indigo&shade=600" alt="MALI-Ed" />
+        <h2 className="mt-6 text-center text-2xl font-bold leading-9 tracking-tight text-gray-900">
+            {isSignUp ? 'Create your account' : 'Sign in to your account'}
         </h2>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+      <div className="mt-10 sm:mx-auto sm:w-full sm:max-w-sm">
         <form className="space-y-6" action={formAction}>
-          <input type="hidden" name="redirect" value={redirect || ''} />
-          <input type="hidden" name="priceId" value={priceId || ''} />
-          <input type="hidden" name="inviteId" value={inviteId || ''} />
+          {/* Pass hidden fields */}
+          {redirectParam && <input type="hidden" name="redirect" value={redirectParam} />}
+          {priceId && <input type="hidden" name="priceId" value={priceId} />}
+          {/* Hidden fields for invite data - only render if values exist and mode is signup */}
+          {isSignUp && inviteToken && (
+            <input type="hidden" name="inviteToken" value={inviteToken} />
+          )}
+          {isSignUp && teamId && (
+            <input type="hidden" name="teamId" value={teamId} />
+          )}
+          {isSignUp && role && (
+            <input type="hidden" name="role" value={role} />
+          )}
+
+          {/* Email Input */}
           <div>
-            <Label
-              htmlFor="email"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Email
-            </Label>
-            <div className="mt-1">
+            <Label htmlFor="email">Email address</Label>
+            <div className="mt-2">
               <Input
                 id="email"
                 name="email"
                 type="email"
                 autoComplete="email"
-                defaultValue={state.email}
                 required
-                maxLength={50}
-                className="appearance-none rounded-full relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-orange-500 focus:border-orange-500 focus:z-10 sm:text-sm"
-                placeholder="Enter your email"
+                defaultValue={state?.fields?.email ?? ''} // Repopulate email if action returns it
+                className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
               />
             </div>
+             {state?.fieldErrors?.email && (
+               <p className="mt-2 text-xs text-red-600">
+                 {state.fieldErrors.email}
+               </p>
+             )}
           </div>
 
+          {/* Password Input */}
           <div>
-            <Label
-              htmlFor="password"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Password
-            </Label>
-            <div className="mt-1">
+            <Label htmlFor="password">Password</Label>
+            <div className="mt-2">
               <Input
                 id="password"
                 name="password"
                 type="password"
-                autoComplete={
-                  mode === 'signin' ? 'current-password' : 'new-password'
-                }
-                defaultValue={state.password}
+                autoComplete={isSignUp ? 'new-password' : 'current-password'}
                 required
-                minLength={8}
-                maxLength={100}
-                className="appearance-none rounded-full relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-orange-500 focus:border-orange-500 focus:z-10 sm:text-sm"
-                placeholder="Enter your password"
+                minLength={isSignUp ? 8 : undefined}
+                className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
               />
             </div>
+             {state?.fieldErrors?.password && (
+               <p className="mt-2 text-xs text-red-600">
+                 {state.fieldErrors.password}
+               </p>
+             )}
+            {/* Optional: Add confirm password field for signup */} 
           </div>
 
-          {state?.error && (
-            <div className="text-red-500 text-sm">{state.error}</div>
+          {/* General Form Error / Success Message */}
+          {state?.error && !state.fieldErrors && (
+            <p className="text-sm text-red-600" aria-live="polite">
+              {state.error}
+            </p>
           )}
+          {state?.message && (
+             <p className="text-sm text-green-600" aria-live="polite">
+               {state.message} {/* Assuming success is in `message` */}
+             </p>
+           )}
 
-          {state?.success && (
-            <div className="text-green-600 text-sm">{state.success}</div>
-          )}
-
+          {/* Submit Button */}
           <div>
-            <Button
+             <Button
               type="submit"
-              className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-full shadow-sm text-sm font-medium text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+              className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
               disabled={pending}
+              aria-disabled={pending}
             >
               {pending ? (
                 <>
                   <Loader2 className="animate-spin mr-2 h-4 w-4" />
-                  Loading...
+                  Processing...
                 </>
-              ) : mode === 'signin' ? (
-                'Sign in'
+              ) : isSignUp ? (
+                'Create account'
               ) : (
-                'Sign up'
+                'Sign in'
               )}
             </Button>
           </div>
         </form>
 
-        <div className="mt-6">
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-gray-50 text-gray-500">
-                {mode === 'signin'
-                  ? 'New to our platform?'
-                  : 'Already have an account?'}
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-6">
-            <Link
-              href={`${mode === 'signin' ? '/sign-up' : '/sign-in'}${
-                redirect ? `?redirect=${redirect}` : ''
-              }${priceId ? `&priceId=${priceId}` : ''}`}
-              className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-full shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
-            >
-              {mode === 'signin'
-                ? 'Create an account'
-                : 'Sign in to existing account'}
-            </Link>
-          </div>
-        </div>
+        {/* Link to switch mode */}
+        <p className="mt-10 text-center text-sm text-gray-500">
+          {isSignUp ? 'Already a member?' : 'Not a member?'}{' '}
+          <Link
+            href={`${isSignUp ? '/sign-in' : '/sign-up'}${redirectParam ? `?redirect=${redirectParam}` : ''}${priceId ? `&priceId=${priceId}` : ''}`}
+            className="font-semibold leading-6 text-indigo-600 hover:text-indigo-500"
+          >
+            {isSignUp ? 'Sign in' : 'Sign up now'}
+          </Link>
+        </p>
       </div>
     </div>
   );

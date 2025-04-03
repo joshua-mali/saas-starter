@@ -86,27 +86,23 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
 const signUpSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
-  inviteId: z.string().optional(),
+  inviteToken: z.string().uuid().optional(),
+  teamId: z.string().optional(),
+  role: z.string().optional(),
 });
 
 export const signUp = validatedAction(signUpSchema, async (data, formData) => {
-  const { email, password, inviteId } = data;
+  const { email, password, inviteToken, teamId, role } = data;
   const supabase = await createClient();
 
-  // TODO: Handle inviteId logic separately after email verification,
-  // potentially using Supabase functions or a separate step in the app.
+  if (inviteToken) {
+    console.log('Sign-up initiated with invite token:', inviteToken, 'Team:', teamId, 'Role:', role);
+  }
 
-  const {
-    data: {
-      user
-    },
-    error
-  } = await supabase.auth.signUp({
+  const { data: signUpData, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      // Optional: Add email redirect URL for verification link
-      // emailRedirectTo: `${origin}/auth/callback`
     },
   });
 
@@ -114,21 +110,17 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     console.error('Supabase sign up error:', error);
     return {
       error: error.message || 'Failed to sign up. Please try again.',
-      email,
-      password,
+      fields: { email },
     };
   }
 
-  // Don't log in the user or create teams/members automatically here.
-  // User needs to verify their email first.
-  // Team association logic should happen after verification.
-
-  // Remove automatic redirection and session setting
-  // redirect('/dashboard');
+  if (!signUpData.user) {
+     console.error('Supabase sign up error: No user data returned despite no error.');
+     return { error: 'An unexpected error occurred during sign up. Please try again.' };
+  }
 
   return {
-    success: 'Sign up successful! Please check your email for a verification link.',
-    email, // Keep email in state if needed by the form
+    message: 'Sign up successful! Please check your email for a verification link.',
   };
 });
 
@@ -513,12 +505,17 @@ export const inviteTeamMember = validatedAction(
 
     // 6. Create a new invitation
     try {
+      // Calculate expiry (e.g., 24 hours)
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
       await db.insert(invitations).values({
         teamId: inviterTeamId,
         email,
         role: invitedRole,
         invitedBy: inviterUser.id, // Use Supabase UUID
         status: 'pending',
+        expiresAt: expiresAt, // Add expiresAt field
+        // token and invitedAt will use DB defaults
       });
     } catch (dbError) {
        console.error("Database error creating invitation:", dbError);

@@ -1,51 +1,65 @@
+import { type EmailOtpType } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { createClient } from '@/lib/supabase/server';
 
 // See: https://supabase.com/docs/guides/auth/server-side/nextjs#create-a-route-handler-to-exchange-the-code-for-a-session
 export async function GET(request: NextRequest) {
-  console.log('Received confirm URL:', request.url); // Log the full request URL
-  const { searchParams } = new URL(request.url)
-  const code = searchParams.get('code')
-  // The 'next' parameter might still be useful if you want to redirect based on the original intent
-  // For invites, we'll likely override this later.
-  const next = searchParams.get('next') ?? '/dashboard' // Default redirect
+  console.log('Confirm Route: Received URL:', request.url);
+  const { searchParams } = new URL(request.url);
+  const code = searchParams.get('code');
+  const token_hash = searchParams.get('token_hash');
+  const type = searchParams.get('type') as EmailOtpType | null;
+  const next = searchParams.get('next') ?? '/auth/complete-profile'; // Default to complete profile after confirmation
 
-  const redirectTo = request.nextUrl.clone()
-  // Determine the final redirect path *after* successful session exchange
-  // For invites (which don't usually carry a 'next' from the initial link),
-  // we typically want to go to a profile completion page.
-  // You might need a way to know if this 'code' originated from an invite.
-  // If Supabase adds the 'type' parameter alongside 'code', you could use that.
-  // Assuming for now that if no 'next' is present, it's an invite flow.
-  // A more robust approach might be needed depending on your exact flows.
-  const finalRedirectPath = next === '/dashboard' ? '/auth/complete-profile' : next; // Heuristic: if default 'next', assume invite
+  const redirectTo = request.nextUrl.clone();
+  // Clear params for the final redirect
+  redirectTo.searchParams.delete('code');
+  redirectTo.searchParams.delete('token_hash');
+  redirectTo.searchParams.delete('type');
+  redirectTo.searchParams.delete('next');
 
-  redirectTo.pathname = finalRedirectPath // Set default success path
-  redirectTo.searchParams.delete('code')
-  redirectTo.searchParams.delete('next') // Clean up search params
+  const supabase = await createClient();
+  let verificationError: string | null = null;
 
   if (code) {
-    const supabase = await createClient()
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
-
-    if (!error) {
-      // Session is set via cookies by exchangeCodeForSession
-      // Redirect to the determined success page
-      return NextResponse.redirect(redirectTo)
+    // --- Handle PKCE Code Exchange --- //
+    console.log('Confirm Route: Attempting code exchange...');
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) {
+      console.error('Auth code exchange error:', error.message);
+      verificationError = `Code exchange failed: ${error.message}`;
+    } else {
+      console.log('Confirm Route: Code exchange successful.');
+      // Session is set via cookies, determine redirect path
+      // Use 'next' param if provided and valid, otherwise default
+      redirectTo.pathname = next; // Defaults to /auth/complete-profile
+      // Potentially add logic here based on inviteToken if passed through?
+      return NextResponse.redirect(redirectTo);
     }
-
-    // Log the code exchange error
-    console.error(`Auth code exchange error:`, error.message)
-    redirectTo.pathname = '/auth/error'
-    redirectTo.searchParams.set('error', 'Code exchange failed: ' + error.message)
-    return NextResponse.redirect(redirectTo)
-
+  } else if (token_hash && type) {
+    // --- Handle OTP/Token Hash Verification (e.g., Email Confirmation) --- //
+    console.log(`Confirm Route: Attempting OTP verification (type: ${type})...`);
+    const { error } = await supabase.auth.verifyOtp({ type, token_hash });
+    if (error) {
+      console.error(`Auth OTP verification error (type ${type}):`, error.message);
+      verificationError = `Verification failed: ${error.message}`;
+    } else {
+      console.log('Confirm Route: OTP verification successful.');
+      // Verification successful, user is effectively logged in (session may be set by verifyOtp depending on flow)
+      // Redirect to profile completion or intended destination
+      redirectTo.pathname = next; // Defaults to /auth/complete-profile
+      return NextResponse.redirect(redirectTo);
+    }
   } else {
-    console.error('Auth confirmation failed: Missing code.')
-    // Redirect to error page if code is missing
-    redirectTo.pathname = '/auth/error'
-    redirectTo.searchParams.set('error', 'Email verification failed. Missing code.')
-    return NextResponse.redirect(redirectTo)
+    // --- Missing necessary parameters --- //
+    console.error('Confirm Route: Missing code or token_hash/type.');
+    verificationError = 'Invalid confirmation link: Missing required parameters.';
   }
+
+  // --- Handle Errors --- //
+  // If we reached here, verification failed or params were missing
+  redirectTo.pathname = '/auth/error';
+  redirectTo.searchParams.set('error', verificationError || 'Unknown verification error.');
+  return NextResponse.redirect(redirectTo);
 } 

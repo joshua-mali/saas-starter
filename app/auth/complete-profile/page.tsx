@@ -18,7 +18,6 @@ export default function CompleteProfilePage() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
 
   useEffect(() => {
@@ -46,16 +45,11 @@ export default function CompleteProfilePage() {
         setIsLoading(false)
         return
     }
-    if (password.length < 6) { // Basic password length check
-        setError('Password must be at least 6 characters long.')
-        setIsLoading(false)
-        return
-    }
 
     try {
-      const result = await completeUserProfile({ password, fullName })
+      const result = await completeUserProfile({ fullName })
 
-      if (result.error) {
+      if (result?.error) {
         setError(result.error)
       } else {
         // On success, redirect to the main dashboard (or wherever appropriate)
@@ -80,7 +74,7 @@ export default function CompleteProfilePage() {
         <CardHeader>
           <CardTitle>Complete Your Profile</CardTitle>
           <CardDescription>
-            Welcome! Please set your name and password to finish setting up your account.
+            Welcome! Please enter your name to finish setting up your account.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -106,19 +100,7 @@ export default function CompleteProfilePage() {
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Your full name"
                 className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Choose a password (min. 6 characters)"
-                className="mt-1"
+                disabled={isLoading} // Disable while loading
               />
             </div>
 

@@ -17,8 +17,10 @@ export const authUsers = pgTable('users', {
 
 export const profiles = pgTable('profiles', {
   id: uuid('id').primaryKey().references(() => authUsers.id, { onDelete: 'cascade' }),
-  name: varchar('name', { length: 100 }),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  full_name: text('full_name'),
+  email: varchar('email', { length: 255 }).unique(),
+  created_at: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const teams = pgTable('teams', {

@@ -3,6 +3,9 @@ import { invitations } from '@/lib/db/schema';
 import { and, eq, gt } from 'drizzle-orm';
 import { NextResponse, type NextRequest } from 'next/server';
 
+// Consider moving cookie name/options to constants
+const INVITE_COOKIE_NAME = 'supabase-invite-context';
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const token = searchParams.get('token');
@@ -62,24 +65,34 @@ export async function GET(request: NextRequest) {
 
     // --- Successful Validation --- //
 
-    // Option: Update status to 'accepted' immediately (or handle later)
-    // You might want to do this *after* the user successfully signs up/in + profile completion
-    // await db.update(invitations).set({ status: 'accepted' }).where(eq(invitations.id, validInvite.id));
-
-    // Redirect to Sign Up page, pre-filling email and passing necessary info
-    // The signup/complete-profile page will need logic to handle this info later
-    // to associate the user with the team.
+    // Prepare redirect URL (only pre-fill email)
     const signupUrl = request.nextUrl.clone();
-    signupUrl.pathname = '/signup'; // Or potentially '/signin' if user might exist
+    signupUrl.pathname = '/sign-up';
+    signupUrl.searchParams.delete('token');
     signupUrl.searchParams.set('email', validInvite.email);
-    // Pass necessary info for sign-up completion logic
-    signupUrl.searchParams.set('inviteToken', token); // Pass the token for potential re-validation
-    signupUrl.searchParams.set('teamId', String(validInvite.teamId));
-    signupUrl.searchParams.set('role', validInvite.role);
 
+    // Create the response object *before* setting the cookie
+    const response = NextResponse.redirect(signupUrl);
 
-    console.log(`Accept Invite: Redirecting to signup: ${signupUrl.toString()}`);
-    return NextResponse.redirect(signupUrl);
+    // Prepare cookie payload
+    const inviteContext = {
+        email: validInvite.email,
+        teamId: validInvite.teamId,
+        role: validInvite.role,
+        inviteToken: token
+    };
+
+    // Set the cookie on the response object
+    response.cookies.set(INVITE_COOKIE_NAME, JSON.stringify(inviteContext), {
+        path: '/',
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 60 * 15, // 15 minutes
+        sameSite: 'lax'
+    });
+
+    console.log(`Accept Invite: Set invite context cookie and redirecting to sign-up: ${signupUrl.toString()}`);
+    return response; // Return the response with the cookie set
 
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown database error';
