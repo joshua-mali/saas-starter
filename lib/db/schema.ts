@@ -59,6 +59,7 @@ export const activityLogs = pgTable('activity_logs', {
 
 export const invitations = pgTable('invitations', {
   id: serial('id').primaryKey(),
+  token: uuid('token').notNull().unique().defaultRandom(),
   teamId: integer('team_id')
     .notNull()
     .references(() => teams.id, { onDelete: 'cascade' }),
@@ -67,7 +68,8 @@ export const invitations = pgTable('invitations', {
   invitedBy: uuid('invited_by')
     .notNull()
     .references(() => authUsers.id, { onDelete: 'cascade' }),
-  invitedAt: timestamp('invited_at').notNull().defaultNow(),
+  invitedAt: timestamp('invited_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   status: varchar('status', { length: 20 }).notNull().default('pending'),
 });
 
