@@ -2,7 +2,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
-console.log("invite-user function initialized (custom token flow)");
+console.log("invite-user function initialized (custom token flow + Resend)");
 
 // Inlined CORS Headers
 const corsHeaders = {
@@ -11,18 +11,27 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS'
 };
 
-// Environment variables are read from Secrets set in the dashboard
-const supabaseUrl = Deno.env.get('NEXT_PUBLIC_SUPABASE_URL');
-const supabaseAnonKey = Deno.env.get('NEXT_PUBLIC_SUPABASE_ANON_KEY');
-const supabaseServiceRoleKey = Deno.env.get('SERVICE_ROLE_KEY'); // Ensure this matches the secret name in dashboard
-const appBaseUrl = Deno.env.get('APP_BASE_URL') || 'http://localhost:3000'; // Add APP_BASE_URL secret or default
+// Explicitly type req as Request
+Deno.serve(async (req: Request) => {
 
-if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
-  console.error("Missing required Secrets: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SERVICE_ROLE_KEY must be set.");
-  // Consider throwing an error in production if secrets are vital
-}
+  // --- Configuration Check (Moved Inside Handler) ---
+  // Read secrets inside the handler
+  const supabaseUrl = Deno.env.get('NEXT_PUBLIC_SUPABASE_URL');
+  const supabaseAnonKey = Deno.env.get('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  const supabaseServiceRoleKey = Deno.env.get('SERVICE_ROLE_KEY');
+  const appBaseUrl = Deno.env.get('APP_BASE_URL') || 'http://localhost:3000';
+  const resendApiKey = Deno.env.get('RESEND_API_KEY');
+  const fromEmail = Deno.env.get('FROM_EMAIL');
 
-Deno.serve(async (req) => {
+  if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey || !resendApiKey || !fromEmail) {
+    console.error("CRITICAL ERROR: Missing required configuration secrets.");
+    return new Response(JSON.stringify({ error: 'Internal Server Error: Service configuration incomplete.' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+  }
+  // --- End Configuration Check ---
+
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -174,18 +183,58 @@ Deno.serve(async (req) => {
 
     const generatedToken = insertedInvite.token;
 
-    // --- 4. Log Invite Link (Instead of Sending Email for Now) ---
-    const inviteLink = `${appBaseUrl}/auth/accept-invite?token=${generatedToken}`;
-    console.log(`**********************************************************`);
-    console.log(`* Invite Link (Normally Sent via Email):`);
-    console.log(`* ${inviteLink}`);
-    console.log(`* For Email: ${email}`);
-    console.log(`* To Team ID: ${teamId}`);
-    console.log(`**********************************************************`);
+    // --- 4. Send Invite Email via Resend ---
+    console.log(`Attempting to send invite email to ${email} via Resend...`);
 
+    // TODO: Consider fetching inviter's name/email and team name for a nicer email
+    const emailSubject = `You're invited to join a team!`;
+    const emailHtml = `
+      <p>Hello,</p>
+      <p>You have been invited to join a team.</p>
+      <p>Click the link below to accept the invitation and set up your account:</p>
+      <p><a href="${appBaseUrl}/auth/accept-invite?token=${generatedToken}">Accept Invitation</a></p>
+      <p>This link will expire in 24 hours.</p>
+      <p>If you did not expect this invitation, you can safely ignore this email.</p>
+    `;
+
+    try {
+        const resendResponse = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${resendApiKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                from: fromEmail, // Your verified sender email from secrets
+                to: [email],     // The invited user's email
+                subject: emailSubject,
+                html: emailHtml
+                // You can also add a `text` version for email clients that don't render HTML
+            })
+        });
+
+        if (!resendResponse.ok) {
+            const errorBody = await resendResponse.json();
+            console.error(`Failed to send email via Resend. Status: ${resendResponse.status}`, errorBody);
+            // Decide if this should be a fatal error for the function
+            // For now, log error but proceed with success response, as invite record exists
+        } else {
+            const successBody = await resendResponse.json();
+            console.log(`Resend email submitted successfully for ${email}. ID: ${successBody.id}`);
+        }
+    } catch (emailError: unknown) {
+        console.error("Error sending email via Resend:", emailError);
+        // Log error but proceed
+    }
 
     // --- 5. Respond ---
-    return new Response(JSON.stringify({ message: `Invite record created successfully for ${email}. Link logged.` }), {
+    // Log the link still, just in case email fails / for debugging
+    console.log(`**********************************************************`);
+    console.log(`* Invite Link (Sent via Email):`);
+    console.log(`* ${appBaseUrl}/auth/accept-invite?token=${generatedToken}`);
+    console.log(`**********************************************************`);
+
+    return new Response(JSON.stringify({ message: `Invite record created and email sent to ${email}.` }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
