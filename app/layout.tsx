@@ -2,6 +2,7 @@ import SupabaseListener from '@/components/supabase-listener';
 import { createClient } from '@/lib/supabase/server';
 import type { Metadata, Viewport } from 'next';
 import { Manrope } from 'next/font/google';
+import { Toaster as SonnerToaster } from 'sonner';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -34,6 +35,8 @@ export default async function RootLayout({
       <body className="min-h-[100dvh] bg-gray-50">
         <SupabaseListener serverAccessToken={session?.access_token} />
         {children}
+        {/* <Toaster /> */}
+        <SonnerToaster richColors position="top-right" />
       </body>
     </html>
   );

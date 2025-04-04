@@ -122,7 +122,7 @@ export function Settings({ teamData }: SettingsProps) {
           )}
         </CardContent>
       </Card>
-      <InviteTeamMember />
+      <InviteTeamMember teamId={teamData.id} />
     </section>
   );
 }

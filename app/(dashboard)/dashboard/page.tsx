@@ -6,8 +6,8 @@ import { Settings } from './settings';
 // Import tables needed for creation + types
 import {
   NewTeam,
-  NewTeamMember,
-  TeamMember, // Import Team type
+  NewTeamMember, // Use base TeamMember type
+  profiles, // Import profiles table
   teamMembers,
   teams
 } from '@/lib/db/schema';
@@ -36,7 +36,7 @@ export default async function SettingsPage() {
     console.log(`No team membership found for user ${user.id}. Attempting to create default team...`);
     try {
       const newTeamData: NewTeam = {
-        name: `${user.email}'s Team`,
+        name: `${user.email}'s Team`, // Default team name
       };
       const [createdTeam] = await db.insert(teams).values(newTeamData).returning({ id: teams.id });
 
@@ -45,6 +45,13 @@ export default async function SettingsPage() {
       }
 
       teamIdToLoad = createdTeam.id;
+
+      // IMPORTANT: Fetch user's profile after potential creation by trigger
+      const [userProfile] = await db.select().from(profiles).where(eq(profiles.id, user.id)).limit(1);
+      if (!userProfile) {
+          console.warn(`Profile not found for user ${user.id} immediately after sign-up/team creation. This might indicate a delay or issue with the handle_new_user trigger.`);
+          // Handle appropriately - perhaps retry or show a placeholder? For now, log warning.
+      }
 
       const newMemberData: NewTeamMember = {
         userId: user.id,
@@ -69,51 +76,50 @@ export default async function SettingsPage() {
      throw new Error('Could not determine team ID for user.');
   }
 
-  // Fetch team data, SIMPLIFYING relations further for debugging
-  const teamData = await db.query.teams.findFirst({
-    where: eq(teams.id, teamIdToLoad),
-    with: {
-      teamMembers: {
-        // Only fetch teamMember columns, DO NOT fetch related user/profile for now
-        columns: {
-          id: true,
-          userId: true,
-          teamId: true,
-          role: true,
-          joinedAt: true
-        },
-        // REMOVED this section for debugging:
-        // with: {
-        //   user: { // Relation to authUsers
-        //     columns: { id: true },
-        //     // Temporarily comment out nested profile relation for debugging
-        //     // with: {
-        //     //   profile: true
-        //     // }
-        //   }
-        // },
-      },
-    },
+  // Fetch team data using explicit joins
+  const team = await db.query.teams.findFirst({
+      where: eq(teams.id, teamIdToLoad)
   });
 
-  if (!teamData) {
+  if (!team) {
     throw new Error(`Team not found for ID: ${teamIdToLoad}`);
   }
 
-  // Adapt data structure - user info will be minimal
+  // Fetch members separately with an explicit join to profiles
+  const membersWithProfiles = await db
+      .select({
+          memberId: teamMembers.id,
+          userId: teamMembers.userId,
+          role: teamMembers.role,
+          joinedAt: teamMembers.joinedAt,
+          profileId: profiles.id,
+          fullName: profiles.full_name,
+          email: profiles.email
+      })
+      .from(teamMembers)
+      .leftJoin(profiles, eq(teamMembers.userId, profiles.id)) // Join on user ID
+      .where(eq(teamMembers.teamId, teamIdToLoad));
+
+  // Adapt data structure
   const adaptedTeamData = {
-    ...teamData,
-    teamMembers: (teamData.teamMembers || []).map((member: TeamMember) => { // Use base TeamMember type
-      return {
-        ...member,
-        user: { // Construct minimal user object
-          id: member.userId,
-          name: null, // No name fetched
-          email: null // No email fetched
-        }
-      };
-    })
+    ...team, // Spread basic team info
+    teamMembers: membersWithProfiles.map((member) => ({
+      id: member.memberId,
+      userId: member.userId,
+      teamId: teamIdToLoad, // Already known
+      role: member.role,
+      joinedAt: member.joinedAt,
+      // Construct nested user object expected by Settings component
+      user: {
+        id: member.userId,
+        name: member.fullName ?? 'Unknown User',
+        email: member.email ?? 'No Email',
+      }
+    }))
   };
 
-  return <Settings teamData={adaptedTeamData} />;
+  // Type assertion for Settings component props if needed
+  // Assuming Settings expects { teamData: { ..., teamMembers: [{ ..., user: { id: string, name: string, email: string } }] } }
+
+  return <Settings teamData={adaptedTeamData as any} />; // Use 'as any' temporarily if types mismatch
 }

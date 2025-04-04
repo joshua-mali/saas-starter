@@ -17,7 +17,7 @@ export default function SupabaseListener({ serverAccessToken }: { serverAccessTo
       if (session?.access_token !== serverAccessToken) {
         // Server and client session mismatch, force a full page reload
         // This ensures cookies are resent and middleware runs with latest state.
-        window.location.reload(); // <-- Force full browser reload
+        router.refresh(); // <-- Force full browser reload
       }
     })
 

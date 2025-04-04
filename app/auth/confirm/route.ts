@@ -10,14 +10,12 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code');
   const token_hash = searchParams.get('token_hash');
   const type = searchParams.get('type') as EmailOtpType | null;
-  const next = searchParams.get('next') ?? '/auth/complete-profile'; // Default to complete profile after confirmation
+  const next = searchParams.get('next') ?? '/'; // Default redirect if none specified
 
   const redirectTo = request.nextUrl.clone();
-  // Clear params for the final redirect
-  redirectTo.searchParams.delete('code');
+  redirectTo.pathname = next;
   redirectTo.searchParams.delete('token_hash');
   redirectTo.searchParams.delete('type');
-  redirectTo.searchParams.delete('next');
 
   const supabase = await createClient();
   let verificationError: string | null = null;
@@ -49,6 +47,8 @@ export async function GET(request: NextRequest) {
       // Verification successful, user is effectively logged in (session may be set by verifyOtp depending on flow)
       // Redirect to profile completion or intended destination
       redirectTo.pathname = next; // Defaults to /auth/complete-profile
+      redirectTo.searchParams.delete('next');
+      redirectTo.pathname = '/dashboard';
       return NextResponse.redirect(redirectTo);
     }
   } else {
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
 
   // --- Handle Errors --- //
   // If we reached here, verification failed or params were missing
-  redirectTo.pathname = '/auth/error';
+  redirectTo.pathname = '/auth/auth-code-error';
   redirectTo.searchParams.set('error', verificationError || 'Unknown verification error.');
   return NextResponse.redirect(redirectTo);
 } 

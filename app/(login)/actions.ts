@@ -11,12 +11,20 @@ import {
   profiles,
   teamMembers,
   type NewActivityLog,
+  type NewTeamMember,
   type TeamMember
 } from '@/lib/db/schema';
 import { createClient } from '@/lib/supabase/server';
 import { and, eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
+
+// Add success field to ActionResult
+interface ActionResult {
+  error?: string | null;
+  fieldErrors?: Record<string, string[]> | null; // Keep fieldErrors if used elsewhere
+  success?: boolean; // Add success flag
+}
 
 async function logActivity(
   teamId: number | null | undefined,
@@ -85,43 +93,94 @@ export const signIn = validatedAction(signInSchema, async (data, formData) => {
 
 const signUpSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8),
-  inviteToken: z.string().uuid().optional(),
+  password: z.string().min(6),
+  fullName: z.string().min(1, "Full name is required"),
+  inviteToken: z.string().optional(),
   teamId: z.string().optional(),
   role: z.string().optional(),
 });
 
 export const signUp = validatedAction(signUpSchema, async (data, formData) => {
-  const { email, password, inviteToken, teamId, role } = data;
+  const { email, password, fullName, inviteToken, teamId, role } = data;
+  console.log('signUp action called with:', { email, fullName, inviteToken, teamId, role });
+
   const supabase = await createClient();
 
-  if (inviteToken) {
-    console.log('Sign-up initiated with invite token:', inviteToken, 'Team:', teamId, 'Role:', role);
-  }
-
-  const { data: signUpData, error } = await supabase.auth.signUp({
+  const { error, data: { user } } = await supabase.auth.signUp({
     email,
     password,
     options: {
+      data: {
+        full_name: fullName,
+      },
     },
   });
 
   if (error) {
-    console.error('Supabase sign up error:', error);
-    return {
-      error: error.message || 'Failed to sign up. Please try again.',
-      fields: { email },
-    };
+    console.error('Supabase sign up error:', error.message);
+    return { error: `Could not authenticate user: ${error.message}` };
   }
 
-  if (!signUpData.user) {
-     console.error('Supabase sign up error: No user data returned despite no error.');
-     return { error: 'An unexpected error occurred during sign up. Please try again.' };
+  if (!user) {
+    return { error: 'Sign up successful, but user data not returned.' };
   }
 
-  return {
-    message: 'Sign up successful! Please check your email for a verification link.',
-  };
+  console.log('Sign up successful for:', user.email, 'User ID:', user.id);
+
+  // --- Invite Processing Logic --- 
+  if (inviteToken && teamId && role) {
+    console.log(`Processing invite for user ${user.id} to team ${teamId} with role ${role}. Token: ${inviteToken}`);
+
+    try {
+      // 1. Add user to the target team
+      const teamIdNum = parseInt(teamId, 10);
+      if (isNaN(teamIdNum)) {
+        throw new Error(`Invalid teamId received: ${teamId}`);
+      }
+      const newMemberData: NewTeamMember = {
+        userId: user.id,
+        teamId: teamIdNum,
+        role: role,
+      };
+      await db.insert(teamMembers).values(newMemberData);
+      console.log(`Successfully inserted user ${user.id} into team_members for team ${teamIdNum}`);
+
+      // 2. Update the invitation status to 'accepted'
+      // Ensure you have imported `invitations` table definition
+      const updateResult = await db.update(invitations)
+         .set({ status: 'accepted' })
+         .where(eq(invitations.token, inviteToken)) // Use the inviteToken from input
+         .returning({ id: invitations.id }); // Add returning clause
+      
+      // Check if any rows were returned (indicating an update occurred)
+      if (updateResult.length > 0) {
+          console.log(`Successfully updated invitation status for token ${inviteToken}`);
+      } else {
+          console.warn(`Could not find or update invitation status for token ${inviteToken}. It might have expired or already been used.`);
+          // Decide if this should be an error for the user - probably not, as they are now in the team.
+      }
+
+      // 3. Clean up invite cookie (if accept-invite route sets one - check that route)
+      // Commented out as it caused linter issues previously and might not be needed
+      // try {
+      //   cookies().delete('invite_context');
+      // } catch (e) { console.warn("Could not delete invite cookie (ignore if lint error)")}
+
+    } catch (dbError) {
+      console.error(`FATAL: Error processing invite during sign up for user ${user.id}, team ${teamId}. Error:`, dbError);
+      // Return an error to the client so they know invite processing failed.
+      // The user account exists, but they aren't in the team.
+      return { 
+        error: `Your account was created, but we failed to add you to the team due to an internal error (${dbError instanceof Error ? dbError.message : 'Unknown DB issue'}). Please contact support.` 
+      };
+    }
+  } else {
+    console.log(`SignUp for user ${user.id} - No invite parameters detected.`);
+    // TODO: Implement default team creation for non-invited users *here* 
+    //       instead of in the dashboard loader if that's desired.
+  }
+
+  return { success: true }; // Return success
 });
 
 export async function signOut() {
@@ -426,14 +485,12 @@ const inviteTeamMemberSchema = z.object({
 
 export const inviteTeamMember = validatedAction(
   inviteTeamMemberSchema,
-  // Remove old user parameter
   async (data, formData) => {
-    const { email, role: invitedRole } = data; // Renamed role
+    const { email, role: invitedRole } = data;
     const supabase = await createClient();
 
     // 1. Get the *acting* Supabase user
     const { data: { user: inviterUser }, error: authError } = await supabase.auth.getUser();
-
     if (authError || !inviterUser) {
       return { error: 'User not authenticated' };
     }
@@ -444,7 +501,7 @@ export const inviteTeamMember = validatedAction(
       [inviterMembership] = await db
         .select({ teamId: teamMembers.teamId, role: teamMembers.role })
         .from(teamMembers)
-        .where(eq(teamMembers.userId, inviterUser.id)) // Use Supabase UUID
+        .where(eq(teamMembers.userId, inviterUser.id))
         .limit(1);
     } catch (dbError) {
       console.error("Database error fetching inviter membership:", dbError);
@@ -462,26 +519,7 @@ export const inviteTeamMember = validatedAction(
 
     const inviterTeamId = inviterMembership.teamId;
 
-    // 4. Remove check for existing members via email (using deprecated users table)
-    /*
-    const existingMember = await db
-      .select()
-      .from(users) // <-- Deprecated table
-      .leftJoin(teamMembers, eq(users.id, teamMembers.userId))
-      .where(
-        and(
-          eq(users.email, email),
-          eq(teamMembers.teamId, inviterTeamId),
-        ),
-      )
-      .limit(1);
-
-    if (existingMember.length > 0) {
-      return { error: 'User is already a member of this team' };
-    }
-    */
-
-    // 5. Check if there's an existing PENDING invitation for this email in THIS team
+    // 4. Check for existing PENDING invitation (Optional but good practice)
     try {
       const existingInvitation = await db
         .select({ id: invitations.id })
@@ -500,37 +538,46 @@ export const inviteTeamMember = validatedAction(
       }
     } catch (dbError) {
       console.error("Database error checking existing invitations:", dbError);
-      return { error: "Database error checking invitations." };
+      // Don't block if this check fails, but log it.
     }
 
-    // 6. Create a new invitation
+    // 5. Invoke the Supabase Edge Function
     try {
-      // Calculate expiry (e.g., 24 hours)
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const { data: funcData, error: funcError } = await supabase.functions.invoke(
+        'invite-user', // The name of your Edge Function
+        {
+          body: { 
+            teamId: inviterTeamId, 
+            email: email, 
+            role: invitedRole 
+          },
+        }
+      );
 
-      await db.insert(invitations).values({
-        teamId: inviterTeamId,
-        email,
-        role: invitedRole,
-        invitedBy: inviterUser.id, // Use Supabase UUID
-        status: 'pending',
-        expiresAt: expiresAt, // Add expiresAt field
-        // token and invitedAt will use DB defaults
-      });
-    } catch (dbError) {
-       console.error("Database error creating invitation:", dbError);
-       return { error: "Database error creating invitation." };
+      if (funcError) {
+        console.error('Edge Function invocation error:', funcError);
+        // Try to return a meaningful error from the function if possible
+        const errorDetail = funcError.context?.error?.message || funcError.message;
+        return { error: `Failed to send invitation: ${errorDetail}` };
+      }
+
+      console.log('Edge Function Response:', funcData); // Log success response if any
+
+      // Assuming function handles DB insert and email
+
+    } catch (invokeError) { // Catch potential network or other errors during invoke
+       console.error("Error invoking Supabase function:", invokeError);
+       return { error: "A network error occurred while sending the invitation." };
     }
 
-    // 7. Log Activity
+    // 6. Log Activity (Still useful)
     await logActivity(
       inviterTeamId,
-      inviterUser.id, // Use Supabase UUID
+      inviterUser.id,
       ActivityType.INVITE_TEAM_MEMBER,
     );
 
-    // TODO: Send invitation email (this logic remains separate)
-    // await sendInvitationEmail(email, teamName, invitedRole)
+    // Email sending is now handled by the Edge Function
 
     return { success: 'Invitation sent successfully' };
   },

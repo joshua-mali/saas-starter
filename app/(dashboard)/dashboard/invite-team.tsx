@@ -22,7 +22,11 @@ type ActionState = {
   success?: string;
 };
 
-export function InviteTeamMember() {
+interface InviteTeamMemberProps {
+  teamId: number;
+}
+
+export function InviteTeamMember({ teamId }: InviteTeamMemberProps) {
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,18 +41,35 @@ export function InviteTeamMember() {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
+      setUserRole(null);
       try {
         const { data: { user: fetchedUser }, error: userError } = await supabase.auth.getUser();
         if (userError) throw userError;
         setUser(fetchedUser);
 
-        if (fetchedUser) {
-          console.warn("TODO: Implement fetching user role in InviteTeamMember component.");
+        if (fetchedUser && teamId) {
+          const { data: memberData, error: memberError } = await supabase
+            .from('team_members')
+            .select('role')
+            .eq('user_id', fetchedUser.id)
+            .eq('team_id', teamId)
+            .single();
+
+          if (memberError) {
+            console.error(`Error fetching role for user ${fetchedUser.id} in team ${teamId}:`, memberError);
+            setUserRole(null);
+          } else if (memberData) {
+            console.log("Fetched user role:", memberData.role);
+            setUserRole(memberData.role);
+          } else {
+            console.warn(`User ${fetchedUser.id} not found as a member of team ${teamId}`);
+            setUserRole(null);
+          }
         } else {
           setUserRole(null);
         }
       } catch (error) {
-        console.error("Error fetching user data:", error);
+        console.error("Error fetching user data or role:", error);
         setUser(null);
         setUserRole(null);
       } finally {
@@ -56,7 +77,7 @@ export function InviteTeamMember() {
       }
     };
     fetchData();
-  }, [supabase]);
+  }, [supabase, teamId]);
 
   const isOwner = userRole === 'owner';
 
