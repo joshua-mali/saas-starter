@@ -1,11 +1,13 @@
 import { relations } from 'drizzle-orm';
 import {
   boolean,
+  date,
   integer,
   pgTable,
   serial,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar
 } from 'drizzle-orm/pg-core';
@@ -192,12 +194,46 @@ export const studentEnrollments = pgTable('student_enrollments', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const terms = pgTable('terms', {
+  id: serial('id').primaryKey(),
+  teamId: integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  calendarYear: integer('calendar_year').notNull(),
+  termNumber: integer('term_number').notNull(),
+  startDate: date('start_date', { mode: 'date' }).notNull(),
+  endDate: date('end_date', { mode: 'date' }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => {
+  return {
+    teamYearTermUnique: uniqueIndex('terms_team_year_term_unique_idx').on(
+        table.teamId,
+        table.calendarYear,
+        table.termNumber
+    ),
+  };
+});
+
+export const classCurriculumPlan = pgTable('class_curriculum_plan', {
+  id: serial('id').primaryKey(),
+  classId: integer('class_id').notNull().references(() => classes.id, { onDelete: 'cascade' }),
+  contentGroupId: integer('content_group_id').notNull().references(() => contentGroups.id, { onDelete: 'cascade' }),
+  weekStartDate: date('week_start_date', { mode: 'date' }).notNull(),
+  durationWeeks: integer('duration_weeks').notNull().default(1),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => {
+    return {
+        classIdx: uniqueIndex('plan_class_idx').on(table.classId),
+    };
+});
+
 export const teamsRelations = relations(teams, ({ many }) => ({
   teamMembers: many(teamMembers),
   activityLogs: many(activityLogs),
   invitations: many(invitations),
   classes: many(classes),
   students: many(students),
+  terms: many(terms),
 }));
 
 export const profilesRelations = relations(profiles, ({ one }) => ({
@@ -280,6 +316,7 @@ export const focusGroupsRelations = relations(focusGroups, ({ one, many }) => ({
 export const contentGroupsRelations = relations(contentGroups, ({ one, many }) => ({
   focusGroup: one(focusGroups, { fields: [contentGroups.focusGroupId], references: [focusGroups.id] }),
   contentPoints: many(contentPoints),
+  classCurriculumPlanItems: many(classCurriculumPlan),
 }));
 
 export const contentPointsRelations = relations(contentPoints, ({ one }) => ({
@@ -291,6 +328,7 @@ export const classesRelations = relations(classes, ({ one, many }) => ({
   stage: one(stages, { fields: [classes.stageId], references: [stages.id] }),
   classTeachers: many(classTeachers),
   studentEnrollments: many(studentEnrollments),
+  classCurriculumPlanItems: many(classCurriculumPlan),
 }));
 
 export const studentsRelations = relations(students, ({ one, many }) => ({
@@ -306,6 +344,15 @@ export const classTeachersRelations = relations(classTeachers, ({ one }) => ({
 export const studentEnrollmentsRelations = relations(studentEnrollments, ({ one }) => ({
   student: one(students, { fields: [studentEnrollments.studentId], references: [students.id] }),
   class: one(classes, { fields: [studentEnrollments.classId], references: [classes.id] }),
+}));
+
+export const termsRelations = relations(terms, ({ one }) => ({
+  team: one(teams, { fields: [terms.teamId], references: [teams.id] }),
+}));
+
+export const classCurriculumPlanRelations = relations(classCurriculumPlan, ({ one }) => ({
+  class: one(classes, { fields: [classCurriculumPlan.classId], references: [classes.id] }),
+  contentGroup: one(contentGroups, { fields: [classCurriculumPlan.contentGroupId], references: [contentGroups.id] }),
 }));
 
 export type Profile = typeof profiles.$inferSelect;
@@ -365,3 +412,8 @@ export type NewStudentEnrollment = typeof studentEnrollments.$inferInsert;
 
 export type Outcome = typeof outcomes.$inferSelect;
 export type NewOutcome = typeof outcomes.$inferInsert;
+
+export type Term = typeof terms.$inferSelect;
+export type NewTerm = typeof terms.$inferInsert;
+export type ClassCurriculumPlanItem = typeof classCurriculumPlan.$inferSelect;
+export type NewClassCurriculumPlanItem = typeof classCurriculumPlan.$inferInsert;

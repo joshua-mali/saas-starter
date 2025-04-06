@@ -71,6 +71,13 @@
       "when": 1743914105748,
       "tag": "0009_fine_the_captain",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1743916264479,
+      "tag": "0010_swift_william_stryker",
+      "breakpoints": true
     }
   ]
 }
