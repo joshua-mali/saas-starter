@@ -1,5 +1,6 @@
 import { relations } from 'drizzle-orm';
 import {
+  boolean,
   integer,
   pgTable,
   serial,
@@ -75,10 +76,150 @@ export const invitations = pgTable('invitations', {
   status: varchar('status', { length: 20 }).notNull().default('pending'),
 });
 
+export const academicYears = pgTable('academic_years', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 50 }).notNull().unique(),
+  startDate: timestamp('start_date', { mode: 'date' }).notNull(),
+  endDate: timestamp('end_date', { mode: 'date' }).notNull(),
+  isCurrent: boolean('is_current').default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const terms = pgTable('terms', {
+  id: serial('id').primaryKey(),
+  academicYearId: integer('academic_year_id').notNull().references(() => academicYears.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 50 }).notNull(),
+  startDate: timestamp('start_date', { mode: 'date' }).notNull(),
+  endDate: timestamp('end_date', { mode: 'date' }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const teachingBlocks = pgTable('teaching_blocks', {
+  id: serial('id').primaryKey(),
+  termId: integer('term_id').notNull().references(() => terms.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 100 }).notNull(),
+  description: text('description'),
+  startWeek: integer('start_week'),
+  endWeek: integer('end_week'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const stages = pgTable('stages', {
+    id: serial('id').primaryKey(),
+    name: varchar('name', { length: 50 }).notNull().unique(),
+    description: text('description'),
+    yearLevels: varchar('year_levels', { length: 50 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const subjects = pgTable('subjects', {
+    id: serial('id').primaryKey(),
+    name: varchar('name', { length: 100 }).notNull().unique(),
+    code: varchar('code', { length: 20 }),
+    description: text('description'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const gradeScales = pgTable('grade_scales', {
+    id: serial('id').primaryKey(),
+    name: varchar('name', { length: 50 }).notNull().unique(),
+    numericValue: integer('numeric_value').notNull().unique(),
+    description: text('description'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const focusAreas = pgTable('focus_areas', {
+  id: serial('id').primaryKey(),
+  stageId: integer('stage_id').notNull().references(() => stages.id, { onDelete: 'cascade' }),
+  subjectId: integer('subject_id').notNull().references(() => subjects.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const focusGroups = pgTable('focus_groups', {
+  id: serial('id').primaryKey(),
+  focusAreaId: integer('focus_area_id').notNull().references(() => focusAreas.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const contentGroups = pgTable('content_groups', {
+  id: serial('id').primaryKey(),
+  focusGroupId: integer('focus_group_id').notNull().references(() => focusGroups.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const contentPoints = pgTable('content_points', {
+  id: serial('id').primaryKey(),
+  contentGroupId: integer('content_group_id').notNull().references(() => contentGroups.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  orderIndex: integer('order_index').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const classes = pgTable('classes', {
+  id: serial('id').primaryKey(),
+  teamId: integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  academicYearId: integer('academic_year_id').notNull().references(() => academicYears.id, { onDelete: 'cascade' }),
+  stageId: integer('stage_id').notNull().references(() => stages.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 100 }).notNull(),
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const students = pgTable('students', {
+  id: serial('id').primaryKey(),
+  teamId: integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  firstName: varchar('first_name', { length: 100 }).notNull(),
+  lastName: varchar('last_name', { length: 100 }).notNull(),
+  dateOfBirth: timestamp('date_of_birth', { mode: 'date' }),
+  externalId: varchar('external_id', { length: 100 }),
+  isActive: boolean('is_active').default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const classTeachers = pgTable('class_teachers', {
+  id: serial('id').primaryKey(),
+  classId: integer('class_id').notNull().references(() => classes.id, { onDelete: 'cascade' }),
+  teacherId: uuid('teacher_id').notNull().references(() => authUsers.id, { onDelete: 'cascade' }),
+  isPrimary: boolean('is_primary').default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const studentEnrollments = pgTable('student_enrollments', {
+  id: serial('id').primaryKey(),
+  studentId: integer('student_id').notNull().references(() => students.id, { onDelete: 'cascade' }),
+  classId: integer('class_id').notNull().references(() => classes.id, { onDelete: 'cascade' }),
+  enrollmentDate: timestamp('enrollment_date', { mode: 'date' }).notNull().defaultNow(),
+  status: varchar('status', { length: 50 }).default('active'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const teamsRelations = relations(teams, ({ many }) => ({
   teamMembers: many(teamMembers),
   activityLogs: many(activityLogs),
   invitations: many(invitations),
+  classes: many(classes),
+  students: many(students),
 }));
 
 export const profilesRelations = relations(profiles, ({ one }) => ({
@@ -124,12 +265,85 @@ export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
   }),
 }));
 
-export const authUsersRelations = relations(authUsers, ({ one }) => ({
+export const authUsersRelations = relations(authUsers, ({ one, many }) => ({
   profile: one(profiles, {
     fields: [authUsers.id],
     references: [profiles.id],
     relationName: 'UserProfile'
   }),
+  classesTaught: many(classTeachers),
+}));
+
+export const academicYearsRelations = relations(academicYears, ({ many }) => ({
+  terms: many(terms),
+  classes: many(classes),
+}));
+
+export const termsRelations = relations(terms, ({ one, many }) => ({
+  academicYear: one(academicYears, {
+    fields: [terms.academicYearId],
+    references: [academicYears.id],
+  }),
+  teachingBlocks: many(teachingBlocks),
+}));
+
+export const teachingBlocksRelations = relations(teachingBlocks, ({ one }) => ({
+  term: one(terms, {
+    fields: [teachingBlocks.termId],
+    references: [terms.id],
+  }),
+}));
+
+export const stagesRelations = relations(stages, ({ many }) => ({
+    focusAreas: many(focusAreas),
+    classes: many(classes),
+}));
+
+export const subjectsRelations = relations(subjects, ({ many }) => ({
+    focusAreas: many(focusAreas),
+}));
+
+export const focusAreasRelations = relations(focusAreas, ({ one, many }) => ({
+  stage: one(stages, { fields: [focusAreas.stageId], references: [stages.id] }),
+  subject: one(subjects, { fields: [focusAreas.subjectId], references: [subjects.id] }),
+  focusGroups: many(focusGroups),
+}));
+
+export const focusGroupsRelations = relations(focusGroups, ({ one, many }) => ({
+  focusArea: one(focusAreas, { fields: [focusGroups.focusAreaId], references: [focusAreas.id] }),
+  contentGroups: many(contentGroups),
+}));
+
+export const contentGroupsRelations = relations(contentGroups, ({ one, many }) => ({
+  focusGroup: one(focusGroups, { fields: [contentGroups.focusGroupId], references: [focusGroups.id] }),
+  contentPoints: many(contentPoints),
+}));
+
+export const contentPointsRelations = relations(contentPoints, ({ one }) => ({
+  contentGroup: one(contentGroups, { fields: [contentPoints.contentGroupId], references: [contentGroups.id] }),
+}));
+
+export const classesRelations = relations(classes, ({ one, many }) => ({
+  team: one(teams, { fields: [classes.teamId], references: [teams.id] }),
+  academicYear: one(academicYears, { fields: [classes.academicYearId], references: [academicYears.id] }),
+  stage: one(stages, { fields: [classes.stageId], references: [stages.id] }),
+  classTeachers: many(classTeachers),
+  studentEnrollments: many(studentEnrollments),
+}));
+
+export const studentsRelations = relations(students, ({ one, many }) => ({
+  team: one(teams, { fields: [students.teamId], references: [teams.id] }),
+  studentEnrollments: many(studentEnrollments),
+}));
+
+export const classTeachersRelations = relations(classTeachers, ({ one }) => ({
+  class: one(classes, { fields: [classTeachers.classId], references: [classes.id] }),
+  teacher: one(authUsers, { fields: [classTeachers.teacherId], references: [authUsers.id] }),
+}));
+
+export const studentEnrollmentsRelations = relations(studentEnrollments, ({ one }) => ({
+  student: one(students, { fields: [studentEnrollments.studentId], references: [students.id] }),
+  class: one(classes, { fields: [studentEnrollments.classId], references: [classes.id] }),
 }));
 
 export type Profile = typeof profiles.$inferSelect;
@@ -161,3 +375,35 @@ export enum ActivityType {
   INVITE_TEAM_MEMBER = 'INVITE_TEAM_MEMBER',
   ACCEPT_INVITATION = 'ACCEPT_INVITATION',
 }
+
+export type AcademicYear = typeof academicYears.$inferSelect;
+export type NewAcademicYear = typeof academicYears.$inferInsert;
+export type Term = typeof terms.$inferSelect;
+export type NewTerm = typeof terms.$inferInsert;
+export type TeachingBlock = typeof teachingBlocks.$inferSelect;
+export type NewTeachingBlock = typeof teachingBlocks.$inferInsert;
+export type Stage = typeof stages.$inferSelect;
+export type NewStage = typeof stages.$inferInsert;
+export type Subject = typeof subjects.$inferSelect;
+export type NewSubject = typeof subjects.$inferInsert;
+export type GradeScale = typeof gradeScales.$inferSelect;
+export type NewGradeScale = typeof gradeScales.$inferInsert;
+
+export type FocusArea = typeof focusAreas.$inferSelect;
+export type NewFocusArea = typeof focusAreas.$inferInsert;
+export type FocusGroup = typeof focusGroups.$inferSelect;
+export type NewFocusGroup = typeof focusGroups.$inferInsert;
+export type ContentGroup = typeof contentGroups.$inferSelect;
+export type NewContentGroup = typeof contentGroups.$inferInsert;
+export type ContentPoint = typeof contentPoints.$inferSelect;
+export type NewContentPoint = typeof contentPoints.$inferInsert;
+
+export type Class = typeof classes.$inferSelect;
+export type NewClass = typeof classes.$inferInsert;
+export type Student = typeof students.$inferSelect;
+export type NewStudent = typeof students.$inferInsert;
+export type ClassTeacher = typeof classTeachers.$inferSelect;
+export type NewClassTeacher = typeof classTeachers.$inferInsert;
+export type StudentEnrollment = typeof studentEnrollments.$inferSelect;
+export type NewStudentEnrollment = typeof studentEnrollments.$inferInsert;
+// dummy comment
