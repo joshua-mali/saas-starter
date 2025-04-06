@@ -134,10 +134,19 @@ export const gradeScales = pgTable('grade_scales', {
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const outcomes = pgTable('outcomes', {
+  id: serial('id').primaryKey(),
+  subjectId: integer('subject_id').notNull().references(() => subjects.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const focusAreas = pgTable('focus_areas', {
   id: serial('id').primaryKey(),
+  outcomeId: integer('outcome_id').notNull().references(() => outcomes.id, { onDelete: 'cascade' }),
   stageId: integer('stage_id').notNull().references(() => stages.id, { onDelete: 'cascade' }),
-  subjectId: integer('subject_id').notNull().references(() => subjects.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -300,12 +309,17 @@ export const stagesRelations = relations(stages, ({ many }) => ({
 }));
 
 export const subjectsRelations = relations(subjects, ({ many }) => ({
+    outcomes: many(outcomes),
+}));
+
+export const outcomesRelations = relations(outcomes, ({ one, many }) => ({
+    subject: one(subjects, { fields: [outcomes.subjectId], references: [subjects.id] }),
     focusAreas: many(focusAreas),
 }));
 
 export const focusAreasRelations = relations(focusAreas, ({ one, many }) => ({
   stage: one(stages, { fields: [focusAreas.stageId], references: [stages.id] }),
-  subject: one(subjects, { fields: [focusAreas.subjectId], references: [subjects.id] }),
+  outcome: one(outcomes, { fields: [focusAreas.outcomeId], references: [outcomes.id] }),
   focusGroups: many(focusGroups),
 }));
 
@@ -406,4 +420,6 @@ export type ClassTeacher = typeof classTeachers.$inferSelect;
 export type NewClassTeacher = typeof classTeachers.$inferInsert;
 export type StudentEnrollment = typeof studentEnrollments.$inferSelect;
 export type NewStudentEnrollment = typeof studentEnrollments.$inferInsert;
-// dummy comment
+
+export type Outcome = typeof outcomes.$inferSelect;
+export type NewOutcome = typeof outcomes.$inferInsert;

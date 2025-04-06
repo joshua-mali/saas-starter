@@ -42,3 +42,42 @@
     └── layout.tsx
     └── not-found.tsx
 ```
+└── 📁lib
+    └── 📁auth
+        └── middleware.ts
+        └── session.ts
+    └── 📁db
+        └── drizzle.ts
+        └── 📁migrations
+            └── 0000_soft_the_anarchist.sql
+            └── 0001_silent_tyrannus.sql
+            └── 0002_useful_blur.sql
+            └── 0003_square_the_hand.sql
+            └── 0004_reflective_warstar.sql
+            └── 0005_spooky_wrecker.sql
+            └── 0006_redundant_gamora.sql
+            └── 0007_loose_norman_osborn.sql
+            └── 0008_mighty_joshua_kane.sql
+            └── 📁meta
+                └── _journal.json
+                └── 0000_snapshot.json
+                └── 0001_snapshot.json
+                └── 0002_snapshot.json
+                └── 0003_snapshot.json
+                └── 0004_snapshot.json
+                └── 0005_snapshot.json
+                └── 0006_snapshot.json
+                └── 0007_snapshot.json
+                └── 0008_snapshot.json
+        └── queries.ts
+        └── schema.ts
+        └── seed.ts
+        └── setup.ts
+    └── 📁payments
+        └── actions.ts
+        └── stripe.ts
+    └── 📁supabase
+        └── client.ts
+        └── server.ts
+    └── utils.ts
+```
