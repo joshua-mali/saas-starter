@@ -76,37 +76,6 @@ export const invitations = pgTable('invitations', {
   status: varchar('status', { length: 20 }).notNull().default('pending'),
 });
 
-export const academicYears = pgTable('academic_years', {
-  id: serial('id').primaryKey(),
-  name: varchar('name', { length: 50 }).notNull().unique(),
-  startDate: timestamp('start_date', { mode: 'date' }).notNull(),
-  endDate: timestamp('end_date', { mode: 'date' }).notNull(),
-  isCurrent: boolean('is_current').default(false),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const terms = pgTable('terms', {
-  id: serial('id').primaryKey(),
-  academicYearId: integer('academic_year_id').notNull().references(() => academicYears.id, { onDelete: 'cascade' }),
-  name: varchar('name', { length: 50 }).notNull(),
-  startDate: timestamp('start_date', { mode: 'date' }).notNull(),
-  endDate: timestamp('end_date', { mode: 'date' }).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const teachingBlocks = pgTable('teaching_blocks', {
-  id: serial('id').primaryKey(),
-  termId: integer('term_id').notNull().references(() => terms.id, { onDelete: 'cascade' }),
-  name: varchar('name', { length: 100 }).notNull(),
-  description: text('description'),
-  startWeek: integer('start_week'),
-  endWeek: integer('end_week'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
 export const stages = pgTable('stages', {
     id: serial('id').primaryKey(),
     name: varchar('name', { length: 50 }).notNull().unique(),
@@ -184,7 +153,7 @@ export const contentPoints = pgTable('content_points', {
 export const classes = pgTable('classes', {
   id: serial('id').primaryKey(),
   teamId: integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
-  academicYearId: integer('academic_year_id').notNull().references(() => academicYears.id, { onDelete: 'cascade' }),
+  calendarYear: integer('calendar_year').notNull(),
   stageId: integer('stage_id').notNull().references(() => stages.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 100 }).notNull(),
   isActive: boolean('is_active').default(true),
@@ -283,26 +252,6 @@ export const authUsersRelations = relations(authUsers, ({ one, many }) => ({
   classesTaught: many(classTeachers),
 }));
 
-export const academicYearsRelations = relations(academicYears, ({ many }) => ({
-  terms: many(terms),
-  classes: many(classes),
-}));
-
-export const termsRelations = relations(terms, ({ one, many }) => ({
-  academicYear: one(academicYears, {
-    fields: [terms.academicYearId],
-    references: [academicYears.id],
-  }),
-  teachingBlocks: many(teachingBlocks),
-}));
-
-export const teachingBlocksRelations = relations(teachingBlocks, ({ one }) => ({
-  term: one(terms, {
-    fields: [teachingBlocks.termId],
-    references: [terms.id],
-  }),
-}));
-
 export const stagesRelations = relations(stages, ({ many }) => ({
     focusAreas: many(focusAreas),
     classes: many(classes),
@@ -339,7 +288,6 @@ export const contentPointsRelations = relations(contentPoints, ({ one }) => ({
 
 export const classesRelations = relations(classes, ({ one, many }) => ({
   team: one(teams, { fields: [classes.teamId], references: [teams.id] }),
-  academicYear: one(academicYears, { fields: [classes.academicYearId], references: [academicYears.id] }),
   stage: one(stages, { fields: [classes.stageId], references: [stages.id] }),
   classTeachers: many(classTeachers),
   studentEnrollments: many(studentEnrollments),
@@ -390,12 +338,6 @@ export enum ActivityType {
   ACCEPT_INVITATION = 'ACCEPT_INVITATION',
 }
 
-export type AcademicYear = typeof academicYears.$inferSelect;
-export type NewAcademicYear = typeof academicYears.$inferInsert;
-export type Term = typeof terms.$inferSelect;
-export type NewTerm = typeof terms.$inferInsert;
-export type TeachingBlock = typeof teachingBlocks.$inferSelect;
-export type NewTeachingBlock = typeof teachingBlocks.$inferInsert;
 export type Stage = typeof stages.$inferSelect;
 export type NewStage = typeof stages.$inferInsert;
 export type Subject = typeof subjects.$inferSelect;

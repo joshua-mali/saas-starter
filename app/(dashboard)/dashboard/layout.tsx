@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Activity, BookOpen, Menu, Settings, Shield, Users, UsersRound } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Users, Settings, Shield, Activity, Menu } from 'lucide-react';
+import { useState } from 'react';
 
 export default function DashboardLayout({
   children,
@@ -16,6 +16,8 @@ export default function DashboardLayout({
 
   const navItems = [
     { href: '/dashboard', icon: Users, label: 'Team' },
+    { href: '/dashboard/classes', icon: BookOpen, label: 'Classes' },
+    { href: '/dashboard/students', icon: UsersRound, label: 'Students' },
     { href: '/dashboard/general', icon: Settings, label: 'General' },
     { href: '/dashboard/activity', icon: Activity, label: 'Activity' },
     { href: '/dashboard/security', icon: Shield, label: 'Security' },
