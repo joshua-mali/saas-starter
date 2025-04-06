@@ -167,34 +167,24 @@ interface DroppableWeekColumnProps {
   children: React.ReactNode;
 }
 function DroppableWeekColumn({ weekStartDate, children }: DroppableWeekColumnProps) {
-  const formattedDate = weekStartDate.toLocaleDateString('en-AU', {
-      day: 'numeric', month: 'short'
-  });
+  const formattedDate = weekStartDate.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
   const id = `week-${weekStartDate.toISOString()}`;
-
-  const { isOver, setNodeRef } = useDroppable({
-    id: id,
-    data: { // Data associated with the drop zone
-      type: 'weekColumn',
-      weekStartDate: weekStartDate,
-    },
-  });
+  const { isOver, setNodeRef } = useDroppable({ id: id, data: { type: 'weekColumn', weekStartDate } });
 
   return (
     <div
-      ref={setNodeRef} // Connect DND hooks
+      ref={setNodeRef}
       className={cn(
-        "w-60 flex-shrink-0 rounded border p-2 flex flex-col", // Base styles
-        isOver ? "bg-primary/10 border-primary" : "bg-muted/40" // Highlight when dragging over
+        "w-48 flex-shrink-0 rounded border p-2 flex flex-col", 
+        isOver ? "bg-primary/10 border-primary" : "bg-muted/40"
       )}
     >
       <h3 className="mb-2 text-center font-medium flex-shrink-0">Week of {formattedDate}</h3>
-      {/* Make the content area scrollable, not the whole column div */}
       <ScrollArea className="flex-grow">
-           <div className="space-y-1 h-full"> {/* Content takes remaining space */}
+           <div className="space-y-1 h-full min-h-full"> 
               {children}
            </div>
-           <ScrollBar orientation="vertical" /> {/* Add vertical scrollbar for content */} 
+           <ScrollBar orientation="vertical" /> 
        </ScrollArea>
     </div>
   );
@@ -342,9 +332,9 @@ export default function PlanningBoardClient({
         onDragEnd={handleDragEnd}
         // onDragCancel={handleDragCancel} // Optional: Clear active item on cancel
     >
-      <div className="flex h-[calc(100vh-150px)] flex-col"> {/* Adjust height as needed */} 
+      <div className="flex flex-col h-full"> 
         {/* Header: Class Name, Term Selector */}
-        <div className="mb-4 flex items-center justify-between p-4 border-b">
+        <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
           <h1 className="text-xl font-semibold">
             Planning: {classData.name} ({classData.calendarYear})
           </h1>
@@ -373,55 +363,55 @@ export default function PlanningBoardClient({
         </div>
 
         {selectedTerm ? (
-          <div className="flex flex-1 overflow-hidden">
-            {/* Left Panel: Fixed overflow */}
-            <div className="w-1/4 max-w-xs flex-shrink-0 border-r p-2 flex flex-col">
-              <h2 className="mb-2 text-lg font-medium flex-shrink-0">Available Content</h2>
-              <Input
+          <div className="flex flex-1 min-h-0 overflow-hidden">
+            {/* Left Panel */}
+            <div className="w-1/5 max-w-[240px] flex-shrink-0 border-r flex flex-col min-h-0">
+              <div className="p-2 space-y-2 flex-shrink-0">
+                <h2 className="text-lg font-medium">Available Content</h2>
+                <Input
                   placeholder="Search content..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="mb-2 flex-shrink-0"
-              />
-              {/* Make this area scrollable */}
-              <ScrollArea className="flex-grow">
-                   <div className="space-y-1 pr-2"> {/* Add padding for scrollbar */} 
-                      {filteredContentGroups.map((cg) => (
-                        <DraggableContentGroup key={cg.contentGroupId} cg={cg} />
-                      ))}
-                   </div>
-                   <ScrollBar orientation="vertical" />
-               </ScrollArea>
+                  className="w-full"
+                />
+              </div>
+              <ScrollArea className="flex-1 min-h-0">
+                <div className="space-y-2 p-2">
+                  {filteredContentGroups.map((cg) => (
+                    <DraggableContentGroup key={cg.contentGroupId} cg={cg} />
+                  ))}
+                </div>
+                <ScrollBar orientation="vertical" />
+              </ScrollArea>
             </div>
 
-            {/* Right Panel: Weekly Kanban Board */}
-            <ScrollArea className="flex-1 whitespace-nowrap">
-              <div className="flex h-full space-x-2 p-2">
-                {weeksInSelectedTerm.map((weekStartDate) => {
-                   const itemsInWeek = planItems.filter(item =>
-                       new Date(item.weekStartDate).getTime() === weekStartDate.getTime()
+            {/* Right Panel */}
+            <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+              <ScrollArea className="flex-1" type="always">
+                <div className="flex space-x-2 p-2 min-w-fit">
+                  {weeksInSelectedTerm.map((weekStartDate) => {
+                    const itemsInWeek = planItems.filter(item =>
+                      new Date(item.weekStartDate).getTime() === weekStartDate.getTime()
                     );
-
-                  return (
-                    <DroppableWeekColumn key={weekStartDate.toISOString()} weekStartDate={weekStartDate}>
-                       {itemsInWeek.map(item => (
-                         // Use DraggablePlanItem component
-                         <DraggablePlanItem
-                           key={item.id}
-                           item={item}
-                           contentGroupName={contentGroupMap.get(item.contentGroupId)} // Pass name
-                         />
-                       ))}
-                       {itemsInWeek.length === 0 && <div className="min-h-[50px]"></div>}
-                    </DroppableWeekColumn>
-                  );
-                })}
-              </div>
-              <ScrollBar orientation="horizontal" />
-            </ScrollArea>
+                    return (
+                      <DroppableWeekColumn key={weekStartDate.toISOString()} weekStartDate={weekStartDate}>
+                        {itemsInWeek.map(item => (
+                          <DraggablePlanItem
+                            key={item.id}
+                            item={item}
+                            contentGroupName={contentGroupMap.get(item.contentGroupId)}
+                          />
+                        ))}
+                      </DroppableWeekColumn>
+                    );
+                  })}
+                </div>
+                <ScrollBar orientation="horizontal" />
+              </ScrollArea>
+            </div>
           </div>
         ) : (
-          <div className="flex flex-1 items-center justify-center">
+          <div className="flex-1 flex items-center justify-center">
             <p className="text-muted-foreground">Please define term dates or select a term to start planning.</p>
           </div>
         )}

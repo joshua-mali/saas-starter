@@ -18,7 +18,7 @@ import { and, eq } from 'drizzle-orm';
 import { notFound, redirect } from 'next/navigation';
 import PlanningBoardClient from './client'; // Client component for the board
 
-// --- Data Fetching Functions --- 
+// --- Data Fetching Functions ---
 
 async function getClassDetails(classId: number, userId: string): Promise<(Class & { stage: Stage | null, teamId: number }) | null> {
   // Fetch class and verify the user is a teacher for it
