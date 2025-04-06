@@ -19,6 +19,8 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { Class, Stage } from '@/lib/db/schema'
+import { ClipboardList } from 'lucide-react'
+import Link from 'next/link'
 import { useActionState, useEffect, useRef } from 'react'
 import { useFormStatus } from 'react-dom'
 import { toast } from 'sonner'
@@ -120,16 +122,24 @@ Enter the details for your new class.
           {initialClasses.length > 0 ? (
             <ul className="space-y-2">
               {initialClasses.map((cls) => (
-                <li key={cls.id} className="rounded border p-3">
-                  <span className="font-medium">{cls.name}</span>
-                  <span className="ml-2 text-sm text-muted-foreground">
-                     ({cls.calendarYear})
-                  </span>
-                  {cls.stage && (
+                <li key={cls.id} className="flex items-center justify-between rounded border p-3">
+                  <div>
+                    <span className="font-medium">{cls.name}</span>
                     <span className="ml-2 text-sm text-muted-foreground">
-                       {cls.stage.name}
+                      ({cls.calendarYear})
                     </span>
-                  )}
+                    {cls.stage && (
+                      <span className="ml-2 text-sm text-muted-foreground">
+                        {cls.stage.name}
+                      </span>
+                    )}
+                  </div>
+                  <Link href={`/dashboard/planning/${cls.id}`} passHref>
+                     <Button variant="outline" size="sm">
+                        <ClipboardList className="mr-1 h-4 w-4" />
+                        Plan
+                    </Button>
+                  </Link>
                 </li>
               ))}
             </ul>
