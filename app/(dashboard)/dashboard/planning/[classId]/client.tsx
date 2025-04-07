@@ -199,24 +199,55 @@ export default function PlanningBoardClient({
   const [selectedTermNumber, setSelectedTermNumber] = useState<number | null>(terms[0]?.termNumber ?? null);
   const [planItems, setPlanItems] = useState<ClassCurriculumPlanItem[]>(initialPlanItems);
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeDragItem, setActiveDragItem] = useState<Active | null>(null); // State for dragged item
+  const [activeDragItem, setActiveDragItem] = useState<Active | null>(null);
 
-  // Update planItems if initialPlanItems changes (e.g., after server action revalidation)
+  // Debug log for initial data
   useEffect(() => {
-      setPlanItems(initialPlanItems);
+    console.log('Initial plan items:', initialPlanItems.map(item => ({
+      ...item,
+      weekStartDate: new Date(item.weekStartDate).toISOString().split('T')[0]
+    })));
+  }, [initialPlanItems]);
+
+  // Update planItems if initialPlanItems changes
+  useEffect(() => {
+    setPlanItems(initialPlanItems);
   }, [initialPlanItems]);
 
   const selectedTerm = useMemo(() => {
     return terms.find(t => t.termNumber === selectedTermNumber);
   }, [selectedTermNumber, terms]);
 
+  // Helper function to format dates consistently
+  const formatDate = (date: Date | string) => {
+    const d = new Date(date);
+    return d.toISOString().split('T')[0]; // YYYY-MM-DD format
+  };
+
+  // Helper function to normalize dates for comparison
+  const normalizeDate = (date: Date | string) => {
+    const d = new Date(date);
+    // Set to midnight UTC to avoid timezone issues
+    d.setUTCHours(0, 0, 0, 0);
+    return d.getTime();
+  };
+
   const weeksInSelectedTerm = useMemo(() => {
     if (!selectedTerm?.startDate || !selectedTerm?.endDate) return [];
-    // Ensure dates are Date objects
-    const start = selectedTerm.startDate instanceof Date ? selectedTerm.startDate : new Date(selectedTerm.startDate);
-    const end = selectedTerm.endDate instanceof Date ? selectedTerm.endDate : new Date(selectedTerm.endDate);
+    const start = new Date(selectedTerm.startDate);
+    const end = new Date(selectedTerm.endDate);
+    
+    console.log('Term dates:', {
+      start: formatDate(start),
+      end: formatDate(end)
+    });
+    
     if (isNaN(start.getTime()) || isNaN(end.getTime())) return [];
-    return getWeeksBetween(start, end);
+    const weeks = getWeeksBetween(start, end);
+    
+    console.log('Generated weeks:', weeks.map(w => formatDate(w)));
+    
+    return weeks;
   }, [selectedTerm]);
 
   const filteredContentGroups = useMemo(() => {
@@ -251,14 +282,14 @@ export default function PlanningBoardClient({
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
-    setActiveDragItem(null); 
+    setActiveDragItem(null);
     const { active, over } = event;
     if (!over) return;
 
     const activeType = active.data.current?.type;
     const overType = over.data.current?.type;
 
-    // --- Logic for Adding Item --- 
+    // --- Logic for Adding Item ---
     if (activeType === 'contentGroup' && overType === 'weekColumn') {
       const contentGroupId = active.data.current?.contentGroupId;
       const weekStartDate = over.data.current?.weekStartDate;
@@ -266,62 +297,69 @@ export default function PlanningBoardClient({
       if (contentGroupId && weekStartDate instanceof Date) {
         const tempId = `optimistic-${Date.now()}`;
         const newItem: ClassCurriculumPlanItem = {
-            id: tempId as any, 
-            classId: classData.id,
-            contentGroupId: contentGroupId,
-            weekStartDate: weekStartDate,
-            durationWeeks: 1,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+          id: tempId as any,
+          classId: classData.id,
+          contentGroupId: contentGroupId,
+          weekStartDate: weekStartDate,
+          durationWeeks: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         };
+
+        // Debug log
+        console.log('Adding new item:', newItem);
+        
         setPlanItems(prev => [...prev, newItem]);
 
-        // Call server action
         addPlanItem({ classId: classData.id, contentGroupId, weekStartDate })
-          .then((result: ActionResult) => { // Type the result
+          .then((result: ActionResult) => {
             if (result.error) {
               toast.error(`Failed to add plan item: ${result.error}`);
-              // Revert optimistic update
-              setPlanItems(prev => prev.filter(item => String(item.id) !== tempId)); // Compare as string
+              setPlanItems(prev => prev.filter(item => String(item.id) !== tempId));
             } else if (result.success && result.newItem) {
               toast.success('Item added to plan!');
-              // Replace optimistic item with real item
-              setPlanItems(prev => prev.map(item => String(item.id) === tempId ? result.newItem! : item)); // Compare as string
+              console.log('Server returned new item:', result.newItem);
+              setPlanItems(prev => prev.map(item => 
+                String(item.id) === tempId ? result.newItem! : item
+              ));
             } else {
-               setPlanItems(prev => prev.filter(item => String(item.id) !== tempId)); // Compare as string
+              setPlanItems(prev => prev.filter(item => String(item.id) !== tempId));
             }
           });
-      } 
+      }
     }
-    // --- Logic for Moving Item --- 
+    // --- Logic for Moving Item ---
     else if (activeType === 'planItem' && overType === 'weekColumn') {
-        const planItemId = active.data.current?.planItemId;
-        const currentWeek = active.data.current?.currentWeekStartDate;
-        const newWeekStartDate = over.data.current?.weekStartDate;
+      const planItemId = active.data.current?.planItemId;
+      const currentWeek = active.data.current?.currentWeekStartDate;
+      const newWeekStartDate = over.data.current?.weekStartDate;
 
-        if (planItemId && newWeekStartDate instanceof Date && currentWeek instanceof Date && newWeekStartDate.getTime() !== currentWeek.getTime()) {
-            const originalItems = [...planItems]; 
-            setPlanItems(prev => prev.map(item =>
-                item.id === planItemId ? { ...item, weekStartDate: newWeekStartDate } : item
-            ));
-            
-            // Call server action
-            updatePlanItem({ planItemId, weekStartDate: newWeekStartDate })
-              .then((result: ActionResult) => { // Type the result
-                 if (result.error) {
-                   toast.error(`Failed to move plan item: ${result.error}`);
-                   setPlanItems(originalItems);
-                 } else if (result.success) {
-                   toast.success('Item moved!');
-                 }
-              });
-        } 
+      if (planItemId && newWeekStartDate instanceof Date) {
+        const originalItems = [...planItems];
+        
+        // Debug log
+        console.log('Moving item:', { planItemId, from: currentWeek, to: newWeekStartDate });
+        
+        setPlanItems(prev => prev.map(item =>
+          item.id === planItemId ? { ...item, weekStartDate: newWeekStartDate } : item
+        ));
+
+        updatePlanItem({ planItemId, weekStartDate: newWeekStartDate })
+          .then((result: ActionResult) => {
+            if (result.error) {
+              toast.error(`Failed to move plan item: ${result.error}`);
+              setPlanItems(originalItems);
+            } else if (result.success) {
+              toast.success('Item moved!');
+            }
+          });
+      }
     }
   };
 
   // Create a map for quick lookup of content group names
   const contentGroupMap = useMemo(() => {
-      return new Map(availableContentGroups.map(cg => [cg.contentGroupId, cg.contentGroupName]));
+    return new Map(availableContentGroups.map(cg => [cg.contentGroupId, cg.contentGroupName]));
   }, [availableContentGroups]);
 
   return (
@@ -390,9 +428,34 @@ export default function PlanningBoardClient({
               <ScrollArea className="flex-1" type="always">
                 <div className="flex space-x-2 p-2 min-w-fit">
                   {weeksInSelectedTerm.map((weekStartDate) => {
-                    const itemsInWeek = planItems.filter(item =>
-                      new Date(item.weekStartDate).getTime() === weekStartDate.getTime()
-                    );
+                    // Use normalized date comparison
+                    const itemsInWeek = planItems.filter(item => {
+                      const itemDate = normalizeDate(item.weekStartDate);
+                      const weekDate = normalizeDate(weekStartDate);
+                      const matches = itemDate === weekDate;
+                      
+                      console.log('Week comparison:', {
+                        weekStartDate: formatDate(weekStartDate),
+                        itemWeekStart: formatDate(item.weekStartDate),
+                        itemId: item.id,
+                        contentGroupId: item.contentGroupId,
+                        matches
+                      });
+                      
+                      return matches;
+                    });
+
+                    // Log items found for this week
+                    if (itemsInWeek.length > 0) {
+                      console.log(`Items for week ${formatDate(weekStartDate)}:`, 
+                        itemsInWeek.map(item => ({
+                          id: item.id,
+                          contentGroupId: item.contentGroupId,
+                          name: contentGroupMap.get(item.contentGroupId)
+                        }))
+                      );
+                    }
+
                     return (
                       <DroppableWeekColumn key={weekStartDate.toISOString()} weekStartDate={weekStartDate}>
                         {itemsInWeek.map(item => (

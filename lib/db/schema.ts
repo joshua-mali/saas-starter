@@ -221,10 +221,6 @@ export const classCurriculumPlan = pgTable('class_curriculum_plan', {
   durationWeeks: integer('duration_weeks').notNull().default(1),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-}, (table) => {
-    return {
-        classIdx: uniqueIndex('plan_class_idx').on(table.classId),
-    };
 });
 
 export const teamsRelations = relations(teams, ({ many }) => ({
