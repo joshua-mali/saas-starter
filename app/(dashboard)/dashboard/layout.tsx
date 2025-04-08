@@ -1,9 +1,9 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Activity, BookOpen, CalendarDays, Menu, Settings, Shield, Users, UsersRound } from 'lucide-react';
+import { Activity, BookOpen, CalendarDays, ClipboardCheck, LayoutPanelLeft, Menu, Settings, Shield, Users, UsersRound } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 export default function DashboardLayout({
@@ -12,11 +12,14 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const navItems = [
     { href: '/dashboard', icon: Users, label: 'Team' },
     { href: '/dashboard/classes', icon: BookOpen, label: 'Classes' },
+    { href: '/dashboard/planning', icon: LayoutPanelLeft, label: 'Planning' },
+    { href: '/dashboard/grading', icon: ClipboardCheck, label: 'Grading' },
     { href: '/dashboard/students', icon: UsersRound, label: 'Students' },
     { href: '/dashboard/terms', icon: CalendarDays, label: 'Terms' },
     { href: '/dashboard/general', icon: Settings, label: 'General' },
@@ -54,9 +57,9 @@ export default function DashboardLayout({
             {navItems.map((item) => (
               <Link key={item.href} href={item.href} passHref>
                 <Button
-                  variant={pathname === item.href ? 'secondary' : 'ghost'}
+                  variant={pathname.startsWith(item.href) ? 'secondary' : 'ghost'}
                   className={`shadow-none my-1 w-full justify-start ${
-                    pathname === item.href ? 'bg-gray-100' : ''
+                    pathname.startsWith(item.href) ? 'bg-gray-100' : ''
                   }`}
                   onClick={() => setIsSidebarOpen(false)}
                 >

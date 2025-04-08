@@ -223,6 +223,30 @@ export const classCurriculumPlan = pgTable('class_curriculum_plan', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const studentAssessments = pgTable('student_assessments', {
+    id: serial('id').primaryKey(),
+    studentEnrollmentId: integer('student_enrollment_id').notNull().references(() => studentEnrollments.id, { onDelete: 'cascade' }),
+    classCurriculumPlanId: integer('class_curriculum_plan_id').notNull().references(() => classCurriculumPlan.id, { onDelete: 'cascade' }),
+    contentGroupId: integer('content_group_id').notNull().references(() => contentGroups.id, { onDelete: 'cascade' }),
+    contentPointId: integer('content_point_id').references(() => contentPoints.id, { onDelete: 'cascade' }), // Nullable for group-level grading
+    gradeScaleId: integer('grade_scale_id').notNull().references(() => gradeScales.id, { onDelete: 'restrict' }), // Restrict deletion of grade scales if used
+    assessmentDate: timestamp('assessment_date', { withTimezone: true }).notNull().defaultNow(),
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  }, (table) => {
+    return {
+      // Unique constraint to prevent duplicate grades for the same student/plan item/point (or student/plan item if point is null)
+      // This might need adjustment based on whether re-grading is allowed or creates new records.
+      // For now, let's assume one grade per student/plan item/point combination.
+      studentPlanPointUniqueIdx: uniqueIndex('student_assessment_unique_idx').on(
+        table.studentEnrollmentId,
+        table.classCurriculumPlanId,
+        table.contentPointId // Including nulls as distinct values if supported, or handle logic elsewhere
+      ),
+    };
+  });
+
 export const teamsRelations = relations(teams, ({ many }) => ({
   teamMembers: many(teamMembers),
   activityLogs: many(activityLogs),
@@ -315,8 +339,9 @@ export const contentGroupsRelations = relations(contentGroups, ({ one, many }) =
   classCurriculumPlanItems: many(classCurriculumPlan),
 }));
 
-export const contentPointsRelations = relations(contentPoints, ({ one }) => ({
+export const contentPointsRelations = relations(contentPoints, ({ one, many }) => ({
   contentGroup: one(contentGroups, { fields: [contentPoints.contentGroupId], references: [contentGroups.id] }),
+  assessments: many(studentAssessments), // Add relation from content point to assessments
 }));
 
 export const classesRelations = relations(classes, ({ one, many }) => ({
@@ -337,18 +362,32 @@ export const classTeachersRelations = relations(classTeachers, ({ one }) => ({
   teacher: one(authUsers, { fields: [classTeachers.teacherId], references: [authUsers.id] }),
 }));
 
-export const studentEnrollmentsRelations = relations(studentEnrollments, ({ one }) => ({
+export const studentEnrollmentsRelations = relations(studentEnrollments, ({ one, many }) => ({
   student: one(students, { fields: [studentEnrollments.studentId], references: [students.id] }),
   class: one(classes, { fields: [studentEnrollments.classId], references: [classes.id] }),
+  assessments: many(studentAssessments), // Add relation from enrollment to assessments
 }));
 
 export const termsRelations = relations(terms, ({ one }) => ({
   team: one(teams, { fields: [terms.teamId], references: [teams.id] }),
 }));
 
-export const classCurriculumPlanRelations = relations(classCurriculumPlan, ({ one }) => ({
+export const classCurriculumPlanRelations = relations(classCurriculumPlan, ({ one, many }) => ({
   class: one(classes, { fields: [classCurriculumPlan.classId], references: [classes.id] }),
   contentGroup: one(contentGroups, { fields: [classCurriculumPlan.contentGroupId], references: [contentGroups.id] }),
+  assessments: many(studentAssessments), // Add relation from plan item to assessments
+}))
+
+export const gradeScalesRelations = relations(gradeScales, ({ many }) => ({
+    assessments: many(studentAssessments), // Add relation from grade scale to assessments
+}));
+
+export const studentAssessmentsRelations = relations(studentAssessments, ({ one }) => ({
+    studentEnrollment: one(studentEnrollments, { fields: [studentAssessments.studentEnrollmentId], references: [studentEnrollments.id] }),
+    classCurriculumPlanItem: one(classCurriculumPlan, { fields: [studentAssessments.classCurriculumPlanId], references: [classCurriculumPlan.id] }),
+    contentGroup: one(contentGroups, { fields: [studentAssessments.contentGroupId], references: [contentGroups.id] }),
+    contentPoint: one(contentPoints, { fields: [studentAssessments.contentPointId], references: [contentPoints.id] }),
+    gradeScale: one(gradeScales, { fields: [studentAssessments.gradeScaleId], references: [gradeScales.id] }),
 }));
 
 export type Profile = typeof profiles.$inferSelect;
@@ -413,3 +452,6 @@ export type Term = typeof terms.$inferSelect;
 export type NewTerm = typeof terms.$inferInsert;
 export type ClassCurriculumPlanItem = typeof classCurriculumPlan.$inferSelect;
 export type NewClassCurriculumPlanItem = typeof classCurriculumPlan.$inferInsert;
+
+export type StudentAssessment = typeof studentAssessments.$inferSelect;
+export type NewStudentAssessment = typeof studentAssessments.$inferInsert;
