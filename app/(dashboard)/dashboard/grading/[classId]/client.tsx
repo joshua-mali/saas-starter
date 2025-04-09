@@ -312,7 +312,16 @@ export default function GradingTableClient({
                                             <Select
                                                 value={currentGradeScaleId?.toString() ?? ''}
                                                 onValueChange={(value) => {
-                                                    // Your existing code
+                                                    // Convert the selected string value back to a number or null
+                                                    const newGradeId = value === '_clear_' || value === '' ? null : parseInt(value, 10);
+                                                    
+                                                    // Call the handler function
+                                                    handleGradeChange(
+                                                        enrollment.id,          // studentEnrollmentId
+                                                        item.id,                // classCurriculumPlanId
+                                                        item.contentGroupId,    // contentGroupId
+                                                        newGradeId              // newGradeScaleId (number | null)
+                                                    );
                                                 }}
                                                 disabled={isPending}
                                             >
@@ -320,8 +329,8 @@ export default function GradingTableClient({
                                                     <SelectValue placeholder="Select Grade..." />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem value="_clear_">-
-                                                    </SelectItem>
+                                                    {/* Option to clear the grade */}
+                                                    <SelectItem value="_clear_">-</SelectItem>
                                                     {gradeScales.map((scale) => (
                                                         <SelectItem key={scale.id} value={scale.id.toString()}>
                                                             {scale.name}
