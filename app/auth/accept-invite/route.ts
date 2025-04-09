@@ -10,7 +10,7 @@ const INVITE_COOKIE_NAME = 'supabase-invite-context';
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const token = searchParams.get('token');
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   const redirectTo = request.nextUrl.clone();
   redirectTo.pathname = '/sign-up'; // Always redirect to sign-up page

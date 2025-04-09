@@ -30,7 +30,7 @@ export async function completeUserProfile(data: { fullName: string }): Promise <
 
     const { fullName } = result.data;
     const supabase = await createClient();
-    const cookieStore = cookies(); // Get cookie store instance correctly
+    const cookieStore = await cookies(); // Get cookie store instance correctly
 
     // 1. Get the current user
     const { data: { user }, error: getUserError } = await supabase.auth.getUser()

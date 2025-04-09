@@ -2,6 +2,7 @@ import { db } from '@/lib/db/drizzle';
 import {
     classCurriculumPlan,
     classes,
+    classTeachers,
     gradeScales,
     studentAssessments,
     studentEnrollments,
@@ -32,9 +33,14 @@ function getCurrentWeekStartDate(): Date {
 }
 
 // Helper function to format dates consistently
-const formatDate = (date: Date | string) => {
+const formatDate = (date: Date | string): string => {
     const d = new Date(date);
-    return d.toISOString().split('T')[0]; // YYYY-MM-DD format
+    // Ensure we handle potential timezone offsets correctly when getting YYYY-MM-DD
+    // One way is to use UTC methods
+    const year = d.getUTCFullYear();
+    const month = (d.getUTCMonth() + 1).toString().padStart(2, '0');
+    const day = d.getUTCDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
 };
 
 // Helper to get weeks between two dates
@@ -56,13 +62,23 @@ function getWeeksBetween(startDate: Date, endDate: Date): Date[] {
 
 // --- Data Fetching Functions ---
 
+// Updated function to include authorization check
+async function checkTeacherAuthorization(classId: number, userId: string): Promise<boolean> {
+    const teacherLink = await db.query.classTeachers.findFirst({
+        where: and(
+            eq(classTeachers.classId, classId),
+            eq(classTeachers.teacherId, userId)
+        ),
+        columns: { id: true } // Only need to know if it exists
+    });
+    return !!teacherLink;
+}
+
 // TODO: Refactor with Planning page fetch if identical (or create shared util)
 async function getClassDetails(classId: number, userId: string): Promise<(Class & { stage: Stage | null, teamId: number }) | null> {
+    // Authorization is checked separately now, so we just fetch the details
     const result = await db.query.classes.findFirst({
-        where: and(
-            eq(classes.id, classId),
-            // TODO: Add proper authorization check (e.g., user is a teacher for this class)
-        ),
+        where: eq(classes.id, classId),
         with: {
             stage: true, 
         }
@@ -90,12 +106,15 @@ async function getGradeScales(teamId: number): Promise<GradeScale[]> {
     return db.select().from(gradeScales).orderBy(gradeScales.numericValue);
 }
 
+// Revert getPlannedItemsForWeek to accept a Date object
 type PlannedItemWithContentGroup = ClassCurriculumPlanItem & { contentGroup: { name: string } };
 async function getPlannedItemsForWeek(classId: number, weekStartDate: Date): Promise<PlannedItemWithContentGroup[]> {
+    // Drizzle ORM should handle matching the JS Date object to the database date column,
+    // ignoring the time part if the column type is `date`.
     return db.query.classCurriculumPlan.findMany({
         where: and(
             eq(classCurriculumPlan.classId, classId),
-            eq(classCurriculumPlan.weekStartDate, weekStartDate)
+            eq(classCurriculumPlan.weekStartDate, weekStartDate) // Use Date object
         ),
         with: {
             contentGroup: {
@@ -127,7 +146,7 @@ async function getTermsForYear(teamId: number, calendarYear: number): Promise<Te
              .orderBy(terms.termNumber);
 }
 
-// --- Page Component Props Interface ---
+// --- Page Component Props Interface (Remove Promise wrappers) ---
 
 interface GradingPageProps {
     params: {
@@ -138,9 +157,12 @@ interface GradingPageProps {
     }
 }
 
-// --- Page Component ---
+// --- Page Component (Use standard destructuring) ---
 
-export default async function GradingPage({ params, searchParams }: GradingPageProps) {
+export default async function GradingPage({
+    params: { classId: rawClassId },
+    searchParams: { week }
+}: GradingPageProps) {
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -148,69 +170,71 @@ export default async function GradingPage({ params, searchParams }: GradingPageP
         redirect('/sign-in');
     }
 
-    // Destructure params and searchParams
-    const { classId: rawClassId } = params;
-    const { week } = searchParams;
-
     const classId = parseInt(rawClassId, 10);
     if (isNaN(classId)) {
-        notFound(); // Invalid classId parameter
+        notFound();
     }
 
-    // Determine the week to display
-    let targetWeekStartDate: Date;
-    if (week) { // Use the destructured week variable
-        targetWeekStartDate = new Date(week);
-        targetWeekStartDate.setHours(0, 0, 0, 0);
-        if (isNaN(targetWeekStartDate.getTime())) {
-            targetWeekStartDate = getCurrentWeekStartDate(); // Fallback if date is invalid
-        }
-    } else {
-        targetWeekStartDate = getCurrentWeekStartDate();
+    // --- Authorization Check ---
+    const isAuthorized = await checkTeacherAuthorization(classId, user.id);
+    if (!isAuthorized) {
+        notFound(); // User is not a teacher for this class
     }
+
+    // Determine the week string and Date object (parsed as UTC)
+    let targetWeekString: string;
+    if (week && /^\d{4}-\d{2}-\d{2}$/.test(week)) {
+        targetWeekString = week;
+    } else {
+        targetWeekString = formatDate(getCurrentWeekStartDate()); // YYYY-MM-DD
+    }
+    const targetWeekDate = new Date(`${targetWeekString}T00:00:00Z`); // UTC Midnight Date object
 
     // --- Fetch Data Concurrently ---
     const classData = await getClassDetails(classId, user.id);
     if (!classData) {
-        notFound(); // Class not found or user not authorized
+        notFound();
     }
 
-    // Add termsData to Promise.all
+    // Pass the Date object to getPlannedItemsForWeek
     const [studentsData, gradeScalesData, plannedItemsData, termsData] = await Promise.all([
         getEnrolledStudents(classId),
         getGradeScales(classData.teamId),
-        getPlannedItemsForWeek(classId, targetWeekStartDate),
-        getTermsForYear(classData.teamId, classData.calendarYear), // Fetch terms
+        getPlannedItemsForWeek(classId, targetWeekDate), // <-- Pass Date object
+        getTermsForYear(classData.teamId, classData.calendarYear),
     ]);
 
-    // Get IDs for fetching existing assessments
-    const studentEnrollmentIds = studentsData.map(s => s.id);
-    const plannedItemIds = plannedItemsData.map(p => p.id);
-    
-    const assessmentsData = await getExistingAssessments(studentEnrollmentIds, plannedItemIds);
+    // --- Server-side Logging --- 
+    console.log(`[GradingPage Server] Fetching for week date obj: ${targetWeekDate.toISOString()}`);
+    console.log(`[GradingPage Server] Fetched ${plannedItemsData.length} planned items.`);
+    // --- End Logging --- 
 
-    // Calculate all weeks for navigation dropdown
+    // Calculate allWeeks using UTC-based dates
     const allWeeks = termsData.flatMap(term => {
-        const start = new Date(term.startDate);
-        const end = new Date(term.endDate);
-        if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
-            return getWeeksBetween(start, end);
+        const termStart = new Date(`${formatDate(term.startDate)}T00:00:00Z`);
+        const termEnd = new Date(`${formatDate(term.endDate)}T00:00:00Z`);
+        if (!isNaN(termStart.getTime()) && !isNaN(termEnd.getTime())) {
+            return getWeeksBetween(termStart, termEnd); // Ensure getWeeksBetween also works with UTC dates
         }
         return [];
     }).sort((a, b) => a.getTime() - b.getTime());
 
+    // Get IDs for fetching existing assessments
+    const studentEnrollmentIds = studentsData.map(s => s.id);
+    const plannedItemIds = plannedItemsData.map(p => p.id);
+    const assessmentsData = await getExistingAssessments(studentEnrollmentIds, plannedItemIds);
+
     return (
         <div className="flex flex-col h-full">
-            {/* Grading Table Client Component - Renders controls and table */}
-            <GradingTableClient 
-                classData={classData} 
+            <GradingTableClient
+                classData={classData}
                 students={studentsData}
                 gradeScales={gradeScalesData}
                 plannedItems={plannedItemsData}
                 initialAssessments={assessmentsData}
-                terms={termsData} // Still needed if client uses term boundaries
-                currentWeek={targetWeekStartDate}
-                allWeeks={allWeeks} // Pass pre-calculated weeks
+                terms={termsData}
+                currentWeek={targetWeekDate} // Pass Date object
+                allWeeks={allWeeks}
             />
         </div>
     );

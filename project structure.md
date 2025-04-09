@@ -4,12 +4,36 @@
         └── 📁dashboard
             └── 📁activity
                 └── page.tsx
+            └── 📁classes
+                └── actions.ts
+                └── client.tsx
+                └── page.tsx
+            └── 📁grading
+                └── 📁[classId]
+                    └── actions.ts
+                    └── client.tsx
+                    └── page.tsx
+                └── page.tsx
             └── invite-team.tsx
             └── layout.tsx
             └── page.tsx
+            └── 📁planning
+                └── 📁[classId]
+                    └── actions.ts
+                    └── client.tsx
+                    └── page.tsx
+                └── page.tsx
             └── 📁security
                 └── page.tsx
             └── settings.tsx
+            └── 📁students
+                └── actions.ts
+                └── client.tsx
+                └── page.tsx
+            └── 📁terms
+                └── actions.ts
+                └── client.tsx
+                └── page.tsx
         └── layout.tsx
         └── page.tsx
         └── 📁pricing
