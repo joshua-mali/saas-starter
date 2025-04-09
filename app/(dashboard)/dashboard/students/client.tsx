@@ -2,32 +2,33 @@
 
 import { Button } from '@/components/ui/button'
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardFooter,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select'
 import {
-    Table,
-    TableBody,
-    TableCaption,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table"
 import { type Class, type Student } from '@/lib/db/schema'; // Import types
+import { useRouter } from 'next/navigation'
 import { useActionState, useEffect, useRef, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { toast } from 'sonner'
@@ -58,6 +59,7 @@ export default function StudentsPageClient({ teacherClasses }: StudentsPageClien
   const [students, setStudents] = useState<StudentData[]>([])
   const [isLoadingStudents, setIsLoadingStudents] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const router = useRouter()
 
   const [addStudentState, addStudentFormAction] = useActionState(
     addStudentToClass,
@@ -123,6 +125,13 @@ export default function StudentsPageClient({ teacherClasses }: StudentsPageClien
     const classId = parseInt(value, 10)
     setSelectedClassId(isNaN(classId) ? null : classId)
   }
+
+  // Function to handle navigation to student overview
+  const handleStudentClick = (studentId: number) => {
+    if (selectedClassId) {
+      router.push(`/dashboard/students/${selectedClassId}/${studentId}`);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -214,7 +223,11 @@ export default function StudentsPageClient({ teacherClasses }: StudentsPageClien
                   </TableHeader>
                   <TableBody>
                     {students.map(({ student, enrollmentStatus }) => (
-                      <TableRow key={student.id}>
+                      <TableRow 
+                        key={student.id}
+                        onClick={() => handleStudentClick(student.id)}
+                        className="cursor-pointer hover:bg-muted/50"
+                      >
                         <TableCell>{student.lastName}</TableCell>
                         <TableCell>{student.firstName}</TableCell>
                         <TableCell>
