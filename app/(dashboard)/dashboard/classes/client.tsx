@@ -2,21 +2,21 @@
 
 import { Button } from '@/components/ui/button'
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardFooter,
-    CardHeader,
-    CardTitle,
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select'
 import { Class, Stage } from '@/lib/db/schema'
 import { ClipboardList } from 'lucide-react'
@@ -134,12 +134,20 @@ Enter the details for your new class.
                       </span>
                     )}
                   </div>
-                  <Link href={`/dashboard/planning/${cls.id}`} passHref>
-                     <Button variant="outline" size="sm">
-                        <ClipboardList className="mr-1 h-4 w-4" />
-                        Plan
-                    </Button>
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Link href={`/dashboard/planning/${cls.id}`} passHref>
+                      <Button variant="outline" size="sm">
+                          <ClipboardList className="mr-1 h-4 w-4" />
+                          Plan
+                      </Button>
+                    </Link>
+                    <Link href={`/dashboard/report/${cls.id}`} passHref>
+                      <Button variant="outline" size="sm">
+                          <ClipboardList className="mr-1 h-4 w-4" />
+                          Report
+                      </Button>
+                    </Link>
+                  </div>
                 </li>
               ))}
             </ul>
