@@ -1,11 +1,11 @@
 import { db } from '@/lib/db/drizzle';
-import { teamMembers, terms, type Term } from '@/lib/db/schema';
+import { teamMembers, terms, type Term } from '@/lib/db/schema'; // Import necessary schema items
 import { createClient } from '@/lib/supabase/server';
 import { and, eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
-import TermDatesClient from './client';
+import { Settings } from '../settings'; // Import the UI component (relative path needed)
 
-// Fetch existing term dates for a specific team and year
+// Function to fetch term dates (copied from original page.tsx)
 async function getTermDatesForYear(teamId: number, calendarYear: number): Promise<Term[]> {
   const termData = await db.select()
                          .from(terms)
@@ -17,7 +17,7 @@ async function getTermDatesForYear(teamId: number, calendarYear: number): Promis
   return termData;
 }
 
-export default async function TermDatesPage() {
+export default async function SettingsPage() { 
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -25,30 +25,29 @@ export default async function TermDatesPage() {
     redirect('/sign-in');
   }
 
-  // Get user's team ID
+  // Get user's team ID (same logic as before)
   const [userTeam] = await db.select({ teamId: teamMembers.teamId })
                          .from(teamMembers)
                          .where(eq(teamMembers.userId, user.id))
                          .limit(1);
 
   if (!userTeam || typeof userTeam.teamId !== 'number') {
-    // Maybe redirect to a page explaining they need to be in a team?
-    // Or handle default team creation if applicable
     throw new Error('User is not associated with a team.');
   }
   const teamId = userTeam.teamId;
 
-  // Determine the current calendar year
+  // Determine current year and fetch terms
   const currentYear = new Date().getFullYear();
-
-  // Fetch existing terms for the current year and team
   const existingTerms = await getTermDatesForYear(teamId, currentYear);
 
+  // Render the Settings UI component, passing only term data
   return (
-    <TermDatesClient
-      teamId={teamId}
-      calendarYear={currentYear}
-      initialTerms={existingTerms}
-    />
+    <div className="p-4 lg:p-8">
+      <h1 className="text-lg lg:text-2xl font-medium mb-6">Settings</h1>
+      <Settings 
+        initialTerms={existingTerms} 
+        calendarYear={currentYear} 
+      />
+    </div>
   );
 } 

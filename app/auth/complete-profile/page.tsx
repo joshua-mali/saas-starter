@@ -52,8 +52,10 @@ export default function CompleteProfilePage() {
       if (result?.error) {
         setError(result.error)
       } else {
-        // On success, redirect to the main dashboard (or wherever appropriate)
-        router.push('/dashboard')
+        console.log('Profile updated successfully');
+        // TODO: Log activity
+        // Redirect to the main application page (now root)
+        router.push('/'); // Ensure this redirects to root
       }
     } catch (e) {
       console.error('Unexpected error completing profile:', e)

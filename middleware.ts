@@ -51,12 +51,37 @@ export async function middleware(request: NextRequest) {
   const { data: { session } } = await supabase.auth.getSession()
 
   const { pathname } = request.nextUrl
-  const protectedRoutes = '/dashboard'
-  const isProtectedRoute = pathname.startsWith(protectedRoutes)
 
+  // Define paths that require authentication
+  const protectedPaths = ['/', '/dashboard']
+
+  // Check if the current path starts with any of the protected paths
+  const isProtectedRoute =
+    pathname === '/' || pathname.startsWith('/dashboard')
+    // Add other top-level protected routes here if needed in the future
+
+  // Allow access to static assets and auth routes regardless of session
+  if (pathname.startsWith('/_next') || 
+      pathname.startsWith('/api') || 
+      pathname.startsWith('/auth') || // Assuming /auth contains login/signup/etc.
+      pathname.startsWith('/sign-in') || // Explicitly allow sign-in page
+      pathname.endsWith('.ico') || 
+      pathname.endsWith('.svg')
+      ) { 
+    return response; // Don't protect these
+  }
+
+  // If trying to access a protected route without a session, redirect to sign-in
   if (isProtectedRoute && !session) {
-    // Redirect unauthorized users from protected routes
-    return NextResponse.redirect(new URL('/sign-in', request.url))
+    const redirectUrl = new URL('/sign-in', request.url)
+    redirectUrl.searchParams.set('next', pathname) // Optionally redirect back after login
+    return NextResponse.redirect(redirectUrl)
+  }
+
+  // If user is authenticated and tries to access auth routes, redirect to home
+  // (Prevents logged-in users from seeing login/signup pages)
+  if (session && (pathname.startsWith('/sign-in') || pathname.startsWith('/auth'))) {
+     return NextResponse.redirect(new URL('/', request.url));
   }
 
   return response

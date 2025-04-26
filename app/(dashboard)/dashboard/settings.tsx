@@ -1,28 +1,21 @@
 'use client';
 
-import { removeTeamMember } from '@/app/(login)/actions';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { deleteAccount, updatePassword } from '@/app/(login)/actions';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import type { Team, TeamMember } from '@/lib/db/schema';
-import { customerPortalAction } from '@/lib/payments/actions';
-import { useActionState } from 'react';
-import { InviteTeamMember } from './invite-team';
-
-type DisplayUser = {
-  id: string;
-  name: string | null;
-  email: string | undefined | null;
-};
-
-type MemberWithDisplayUser = TeamMember & {
-  user: DisplayUser;
-};
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { Term } from '@/lib/db/schema';
+import { Loader2, Lock, Trash2 } from 'lucide-react';
+import { startTransition, useActionState, useEffect, useRef } from 'react';
+import { useFormStatus } from 'react-dom';
+import { toast } from 'sonner';
+import { saveTermDates } from './settings/actions';
 
 type SettingsProps = {
-  teamData: Team & {
-    teamMembers: MemberWithDisplayUser[];
-  };
+  initialTerms: Term[];
+  calendarYear: number;
 };
 
 type ActionState = {
@@ -30,99 +23,232 @@ type ActionState = {
   success?: string;
 };
 
-export function Settings({ teamData }: SettingsProps) {
-  const [removeState, removeAction, isRemovePending] = useActionState<
+const formatDateForInput = (date: Date | null | undefined): string => {
+  if (!date) return '';
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return '';
+  return d.toISOString().split('T')[0];
+};
+
+function TermSubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" disabled={pending} aria-disabled={pending}>
+      {pending ? 'Saving Dates...' : 'Save Term Dates'}
+    </Button>
+  );
+}
+
+export function Settings({ initialTerms, calendarYear }: SettingsProps) {
+  const [termState, termAction] = useActionState(saveTermDates, { error: null, success: false });
+  const termFormRef = useRef<HTMLFormElement>(null);
+  const initialTermMap = new Map(initialTerms.map(t => [t.termNumber, t]));
+
+  const [passwordState, passwordAction, isPasswordPending] = useActionState<
     ActionState,
     FormData
-  >(removeTeamMember, { error: '', success: '' });
+  >(updatePassword, { error: '', success: '' });
 
-  const getUserDisplayName = (user: DisplayUser) => {
-    return user.name || user.email || 'Unknown User';
+  const [deleteState, deleteAction, isDeletePending] = useActionState<
+    ActionState,
+    FormData
+  >(deleteAccount, { error: '', success: '' });
+
+  useEffect(() => {
+    if (termState.error) {
+      toast.error(termState.error);
+    } else if (termState.success) {
+      toast.success('Term dates saved successfully!');
+    }
+  }, [termState]);
+
+  useEffect(() => {
+    if (passwordState.error) {
+      toast.error(passwordState.error);
+    } else if (passwordState.success) {
+      toast.success(passwordState.success);
+    }
+  }, [passwordState]);
+
+  useEffect(() => {
+    if (deleteState.error) {
+      toast.error(deleteState.error);
+    }
+  }, [deleteState]);
+
+  const handlePasswordSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    startTransition(() => {
+      passwordAction(new FormData(event.currentTarget));
+    });
+  };
+
+  const handleDeleteSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    startTransition(() => {
+      deleteAction(new FormData(event.currentTarget));
+    });
   };
 
   return (
-    <section className="flex-1 p-4 lg:p-8">
-      <h1 className="text-lg lg:text-2xl font-medium mb-6">Team Settings</h1>
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Team Subscription</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-              <div className="mb-4 sm:mb-0">
-                <p className="font-medium">
-                  Current Plan: {teamData.planName || 'Free'}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {teamData.subscriptionStatus === 'active'
-                    ? 'Billed monthly'
-                    : teamData.subscriptionStatus === 'trialing'
-                      ? 'Trial period'
-                      : 'No active subscription'}
-                </p>
-              </div>
-              <form action={customerPortalAction}>
-                <Button type="submit" variant="outline">
-                  Manage Subscription
-                </Button>
-              </form>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Team Members</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-4">
-            {teamData.teamMembers.map((member, index) => (
-              <li key={member.id} className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <Avatar>
-                    <AvatarImage
-                      src={`/placeholder.svg?height=32&width=32`}
-                      alt={getUserDisplayName(member.user)}
-                    />
-                    <AvatarFallback>
-                      {getUserDisplayName(member.user)
-                        .split(' ')
-                        .map((n: string) => n[0])
-                        .join('')}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="font-medium">
-                      {getUserDisplayName(member.user)}
-                    </p>
-                    <p className="text-sm text-muted-foreground capitalize">
-                      {member.role}
-                    </p>
+    <Tabs defaultValue="terms" className="w-full">
+      <TabsList className="grid w-full grid-cols-2 mb-6">
+        <TabsTrigger value="terms">Term Dates</TabsTrigger>
+        <TabsTrigger value="security">Security</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="terms">
+        <Card>
+          <CardHeader>
+            <CardTitle>Term Dates for {calendarYear}</CardTitle>
+            <CardDescription>
+              Enter the start and end dates for each term in {calendarYear}.
+            </CardDescription>
+          </CardHeader>
+          <form ref={termFormRef} action={termAction}>
+            <input type="hidden" name="calendarYear" value={calendarYear} />
+            <CardContent className="space-y-6">
+              {[1, 2, 3, 4].map((termNum) => {
+                const existingTerm = initialTermMap.get(termNum);
+                return (
+                  <div key={termNum} className="rounded border p-4">
+                    <h4 className="mb-2 font-semibold">Term {termNum}</h4>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor={`term${termNum}_start`}>Start Date</Label>
+                        <Input
+                          id={`term${termNum}_start`}
+                          name={`term${termNum}_start`}
+                          type="date"
+                          required
+                          defaultValue={formatDateForInput(existingTerm?.startDate)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`term${termNum}_end`}>End Date</Label>
+                        <Input
+                          id={`term${termNum}_end`}
+                          name={`term${termNum}_end`}
+                          type="date"
+                          required
+                          defaultValue={formatDateForInput(existingTerm?.endDate)}
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
-                {teamData.teamMembers.length > 1 && member.role !== 'owner' && (
-                  <form action={removeAction}>
-                    <input type="hidden" name="memberId" value={member.id} />
-                    <Button
-                      type="submit"
-                      variant="outline"
-                      size="sm"
-                      disabled={isRemovePending}
-                    >
-                      {isRemovePending ? 'Removing...' : 'Remove'}
-                    </Button>
-                  </form>
+                )
+              })}
+            </CardContent>
+            <CardFooter>
+              <TermSubmitButton />
+            </CardFooter>
+          </form>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="security" className="space-y-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Password</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form className="space-y-4" onSubmit={handlePasswordSubmit}>
+              <div>
+                <Label htmlFor="current-password">Current Password</Label>
+                <Input
+                  id="current-password"
+                  name="currentPassword"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  minLength={8}
+                  maxLength={100}
+                />
+              </div>
+              <div>
+                <Label htmlFor="new-password">New Password</Label>
+                <Input
+                  id="new-password"
+                  name="newPassword"
+                  type="password"
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                  maxLength={100}
+                />
+              </div>
+              <div>
+                <Label htmlFor="confirm-password">Confirm New Password</Label>
+                <Input
+                  id="confirm-password"
+                  name="confirmPassword"
+                  type="password"
+                  required
+                  minLength={8}
+                  maxLength={100}
+                />
+              </div>
+              {passwordState.error && (
+                <p className="text-red-500 text-sm">{passwordState.error}</p>
+              )}
+              {passwordState.success && (
+                <p className="text-green-500 text-sm">{passwordState.success}</p>
+              )}
+              <Button
+                type="submit"
+                className="bg-orange-500 hover:bg-orange-600 text-white"
+                disabled={isPasswordPending}
+              >
+                {isPasswordPending ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Updating...</>
+                ) : (
+                  <><Lock className="mr-2 h-4 w-4" /> Update Password</>
                 )}
-              </li>
-            ))}
-          </ul>
-          {removeState?.error && (
-            <p className="text-red-500 mt-4">{removeState.error}</p>
-          )}
-        </CardContent>
-      </Card>
-      <InviteTeamMember teamId={teamData.id} />
-    </section>
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Delete Account</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-500 mb-4">
+              Account deletion is non-reversable. Please proceed with caution.
+            </p>
+            <form onSubmit={handleDeleteSubmit} className="space-y-4">
+              <div>
+                <Label htmlFor="delete-password">Confirm Password</Label>
+                <Input
+                  id="delete-password"
+                  name="password"
+                  type="password"
+                  required
+                  minLength={8}
+                  maxLength={100}
+                />
+              </div>
+              {deleteState.error && (
+                <p className="text-red-500 text-sm">{deleteState.error}</p>
+              )}
+              <Button
+                type="submit"
+                variant="destructive"
+                className="bg-red-600 hover:bg-red-700"
+                disabled={isDeletePending}
+              >
+                {isDeletePending ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Deleting...</>
+                ) : (
+                  <><Trash2 className="mr-2 h-4 w-4" /> Delete Account</>
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+    </Tabs>
   );
 }

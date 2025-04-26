@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Activity, BookOpen, CalendarDays, ClipboardCheck, LayoutPanelLeft, Menu, Settings, Shield, Users, UsersRound } from 'lucide-react';
+import { BookOpen, ClipboardCheck, HomeIcon, LayoutPanelLeft, Menu, Settings, UsersRound } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -16,15 +16,12 @@ export default function DashboardLayout({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const navItems = [
-    { href: '/dashboard', icon: Users, label: 'Team' },
+    { href: '/dashboard', icon: HomeIcon, label: 'Home' },
     { href: '/dashboard/classes', icon: BookOpen, label: 'Classes' },
     { href: '/dashboard/planning', icon: LayoutPanelLeft, label: 'Planning' },
     { href: '/dashboard/grading', icon: ClipboardCheck, label: 'Grading' },
     { href: '/dashboard/students', icon: UsersRound, label: 'Students' },
-    { href: '/dashboard/terms', icon: CalendarDays, label: 'Terms' },
-    { href: '/dashboard/general', icon: Settings, label: 'General' },
-    { href: '/dashboard/activity', icon: Activity, label: 'Activity' },
-    { href: '/dashboard/security', icon: Shield, label: 'Security' },
+    { href: '/dashboard/settings', icon: Settings, label: 'Settings' },
   ];
 
   return (
@@ -32,7 +29,7 @@ export default function DashboardLayout({
       {/* Mobile header */}
       <div className="lg:hidden flex items-center justify-between bg-white border-b border-gray-200 p-4">
         <div className="flex items-center">
-          <span className="font-medium">Settings</span>
+          <span className="font-medium">{navItems.find(item => pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href)))?.label ?? 'Dashboard'}</span>
         </div>
         <Button
           className="-mr-3"
@@ -57,9 +54,9 @@ export default function DashboardLayout({
             {navItems.map((item) => (
               <Link key={item.href} href={item.href} passHref>
                 <Button
-                  variant={pathname.startsWith(item.href) ? 'secondary' : 'ghost'}
+                  variant={pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href)) ? 'secondary' : 'ghost'}
                   className={`shadow-none my-1 w-full justify-start ${
-                    pathname.startsWith(item.href) ? 'bg-gray-100' : ''
+                    pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href)) ? 'bg-gray-100' : ''
                   }`}
                   onClick={() => setIsSidebarOpen(false)}
                 >

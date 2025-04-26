@@ -2,19 +2,19 @@ import { db } from '@/lib/db/drizzle';
 import { createClient } from '@/lib/supabase/server';
 import { eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
-import { Settings } from './settings';
+import { TeamSettings } from './team-settings';
 // Import tables needed for creation + types
 import {
   NewTeam,
   NewTeamMember, // Use base TeamMember type
   profiles, // Import profiles table
   teamMembers,
-  teams
+  teams,
 } from '@/lib/db/schema';
 // Import logActivity types if needed
 // import { logActivity, ActivityType } from '@/app/(login)/actions';
 
-export default async function SettingsPage() {
+export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -76,29 +76,26 @@ export default async function SettingsPage() {
      throw new Error('Could not determine team ID for user.');
   }
 
-  // Fetch team data using explicit joins
-  const team = await db.query.teams.findFirst({
-      where: eq(teams.id, teamIdToLoad)
-  });
+  // Fetch ONLY team data and members
+  const [team, membersWithProfiles] = await Promise.all([
+    db.query.teams.findFirst({ where: eq(teams.id, teamIdToLoad) }),
+    db.select({
+        memberId: teamMembers.id,
+        userId: teamMembers.userId,
+        role: teamMembers.role,
+        joinedAt: teamMembers.joinedAt,
+        profileId: profiles.id,
+        fullName: profiles.full_name,
+        email: profiles.email
+    })
+    .from(teamMembers)
+    .leftJoin(profiles, eq(teamMembers.userId, profiles.id))
+    .where(eq(teamMembers.teamId, teamIdToLoad)),
+  ]);
 
   if (!team) {
     throw new Error(`Team not found for ID: ${teamIdToLoad}`);
   }
-
-  // Fetch members separately with an explicit join to profiles
-  const membersWithProfiles = await db
-      .select({
-          memberId: teamMembers.id,
-          userId: teamMembers.userId,
-          role: teamMembers.role,
-          joinedAt: teamMembers.joinedAt,
-          profileId: profiles.id,
-          fullName: profiles.full_name,
-          email: profiles.email
-      })
-      .from(teamMembers)
-      .leftJoin(profiles, eq(teamMembers.userId, profiles.id)) // Join on user ID
-      .where(eq(teamMembers.teamId, teamIdToLoad));
 
   // Adapt data structure
   const adaptedTeamData = {
@@ -118,8 +115,11 @@ export default async function SettingsPage() {
     }))
   };
 
-  // Type assertion for Settings component props if needed
-  // Assuming Settings expects { teamData: { ..., teamMembers: [{ ..., user: { id: string, name: string, email: string } }] } }
-
-  return <Settings teamData={adaptedTeamData as any} />; // Use 'as any' temporarily if types mismatch
+  // Render the TeamSettings component
+  return (
+    <div className="p-4 lg:p-8">
+      <h1 className="text-lg lg:text-2xl font-medium mb-6">Team & Subscription</h1>
+      <TeamSettings teamData={adaptedTeamData as any} />
+    </div>
+  );
 }

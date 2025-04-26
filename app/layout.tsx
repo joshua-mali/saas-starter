@@ -6,8 +6,8 @@ import { Toaster as SonnerToaster } from 'sonner';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Next.js SaaS Starter',
-  description: 'Get started quickly with Next.js, Postgres, and Stripe.',
+  title: 'MALI-Ed',
+  description: 'MALI-Ed is a platform for creating and sharing educational content.',
 };
 
 export const viewport: Viewport = {
