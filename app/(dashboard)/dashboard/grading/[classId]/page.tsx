@@ -127,16 +127,24 @@ async function getPlannedItemsForWeek(classId: number, weekStartDate: Date): Pro
 
 async function getExistingAssessments(
     enrollmentIds: number[], 
-    planItemIds: number[]
+    weekStartDate: Date
 ): Promise<StudentAssessment[]> {
-    if (enrollmentIds.length === 0 || planItemIds.length === 0) {
+    console.log(`[getExistingAssessments] Fetching for date: ${weekStartDate.toISOString()}`);
+    if (enrollmentIds.length === 0) {
         return [];
     }
-    return db.select().from(studentAssessments)
-             .where(and(
-                 inArray(studentAssessments.studentEnrollmentId, enrollmentIds),
-                 inArray(studentAssessments.classCurriculumPlanId, planItemIds)
-             ));
+    try {
+        const assessments = await db.select().from(studentAssessments)
+                .where(and(
+                    inArray(studentAssessments.studentEnrollmentId, enrollmentIds),
+                    eq(studentAssessments.assessmentDate, weekStartDate)
+                ));
+        console.log(`[getExistingAssessments] Found ${assessments.length} assessments.`);
+        return assessments;
+    } catch (error) {
+        console.error(`[getExistingAssessments] Error fetching assessments:`, error);
+        return [];
+    }
 }
 
 // Add function to get terms for the class year
@@ -159,10 +167,8 @@ interface GradingPageProps {
 
 // --- Page Component (Use standard destructuring) ---
 
-export default async function GradingPage({
-    params: { classId: rawClassId },
-    searchParams: { week }
-}: GradingPageProps) {
+export default async function GradingPage(props: GradingPageProps) {
+    const { params: { classId: rawClassId }, searchParams: { week } } = props;
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
@@ -219,21 +225,75 @@ export default async function GradingPage({
         return [];
     }).sort((a, b) => a.getTime() - b.getTime());
 
-    // Get IDs for fetching existing assessments
-    const studentEnrollmentIds = studentsData.map(s => s.id);
-    const plannedItemIds = plannedItemsData.map(p => p.id);
-    const assessmentsData = await getExistingAssessments(studentEnrollmentIds, plannedItemIds);
+    // --- Week Fallback Logic ---
+    let finalTargetWeekDate = targetWeekDate;
+    let finalPlannedItemsData = plannedItemsData;
+    let finalAssessmentsData: StudentAssessment[] = []; // Initialize assessment data array
+
+    if (finalPlannedItemsData.length === 0 && allWeeks.length > 0) {
+        console.log(`[GradingPage Server] No planned items for ${targetWeekDate.toISOString()}. Finding fallback week.`);
+        // Find the latest week in allWeeks <= original targetWeekDate
+        const potentialFallbackWeeks = allWeeks.filter(w => w.getTime() <= targetWeekDate.getTime());
+        let fallbackWeekDate: Date | null = null;
+
+        if (potentialFallbackWeeks.length > 0) {
+            fallbackWeekDate = potentialFallbackWeeks[potentialFallbackWeeks.length - 1];
+        } else {
+            // If no week is before or equal, use the very last week available
+            fallbackWeekDate = allWeeks[allWeeks.length - 1];
+        }
+
+        if (fallbackWeekDate && fallbackWeekDate.getTime() !== targetWeekDate.getTime()) {
+            console.log(`[GradingPage Server] Falling back to week: ${fallbackWeekDate.toISOString()}`);
+            finalTargetWeekDate = fallbackWeekDate;
+            // Re-fetch planned items and assessments for the fallback week
+            finalPlannedItemsData = await getPlannedItemsForWeek(classId, finalTargetWeekDate);
+            // Fetch assessments only if there are planned items for the fallback week
+            if (finalPlannedItemsData.length > 0) {
+                const studentEnrollmentIds = studentsData.map(s => s.id);
+                finalAssessmentsData = await getExistingAssessments(studentEnrollmentIds, finalTargetWeekDate);
+            } else {
+                console.log(`[GradingPage Server] Fallback week ${fallbackWeekDate.toISOString()} also has no planned items.`);
+                finalAssessmentsData = []; // Ensure it's empty if fallback also has no items
+            }
+            console.log(`[GradingPage Server] Fetched ${finalPlannedItemsData.length} planned items for fallback week.`);
+        } else {
+            console.log(`[GradingPage Server] Fallback week is same as target or no fallback possible. Using original empty planned items.`);
+            // If fallback is the same or no fallback possible, assessments remain empty
+            finalAssessmentsData = []; 
+        }
+    } else {
+        // If initial fetch had items, fetch assessments for the initial target week
+        const studentEnrollmentIds = studentsData.map(s => s.id);
+        finalAssessmentsData = await getExistingAssessments(studentEnrollmentIds, finalTargetWeekDate);
+        console.log(`[GradingPage Server] Assessments data fetched after getExistingAssessments: ${finalAssessmentsData.length} items`);
+    }
+
+    // --- Log data before passing to client ---
+    console.log(`[GradingPage Server] Passing ${finalPlannedItemsData.length} planned items to client:`, 
+        JSON.stringify(finalPlannedItemsData.map(p => ({ id: p.id, name: p.contentGroup.name }))) // Log IDs and names
+    );
+    console.log(`[GradingPage Server] Passing ${finalAssessmentsData.length} assessments to client:`, 
+        JSON.stringify(finalAssessmentsData.map(a => ({ // Log key fields
+            id: a.id, 
+            enrollmentId: a.studentEnrollmentId, 
+            planId: a.classCurriculumPlanId, 
+            date: a.assessmentDate 
+        })))
+    );
+    // --- End Logging ---
 
     return (
         <div className="flex flex-col h-full">
             <GradingTableClient
+                key={finalTargetWeekDate.toISOString()}
                 classData={classData}
                 students={studentsData}
                 gradeScales={gradeScalesData}
-                plannedItems={plannedItemsData}
-                initialAssessments={assessmentsData}
+                plannedItems={finalPlannedItemsData}
+                initialAssessments={finalAssessmentsData}
                 terms={termsData}
-                currentWeek={targetWeekDate} // Pass Date object
+                currentWeek={finalTargetWeekDate}
                 allWeeks={allWeeks}
             />
         </div>

@@ -29,6 +29,7 @@ const saveAssessmentSchema = z.object({
     gradeScaleId: z.coerce.number().int().positive(),
     notes: z.string().optional().nullable(),
     assessmentIdToUpdate: z.coerce.number().int().positive().optional().nullable(), // If updating existing
+    weekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // YYYY-MM-DD format
 });
 
 // --- Action Result Type ---
@@ -62,7 +63,8 @@ export async function saveAssessment(
         contentPointId,
         gradeScaleId,
         notes,
-        assessmentIdToUpdate // Check if we are updating
+        assessmentIdToUpdate,
+        weekStartDate: weekStartDateString,
     } = validatedFields.data;
 
     // --- Authorization Check ---
@@ -71,6 +73,8 @@ export async function saveAssessment(
 
     try {
         let savedAssessment: StudentAssessment;
+        // Parse the week start date string into a UTC Date object
+        const assessmentDate = new Date(`${weekStartDateString}T00:00:00Z`); 
 
         if (assessmentIdToUpdate) {
             // --- Update Existing Assessment ---
@@ -78,7 +82,7 @@ export async function saveAssessment(
                 .set({
                     gradeScaleId: gradeScaleId,
                     notes: notes,
-                    assessmentDate: new Date(), // Update assessment date on change
+                    assessmentDate: assessmentDate, // Use parsed week start date
                     updatedAt: new Date(),
                 })
                 .where(eq(studentAssessments.id, assessmentIdToUpdate))
@@ -99,7 +103,8 @@ export async function saveAssessment(
                 contentPointId,
                 gradeScaleId,
                 notes,
-                // assessmentDate, createdAt, updatedAt will use defaults
+                assessmentDate: assessmentDate, // Use parsed week start date
+                // createdAt, updatedAt will use defaults
             };
 
             const [newItem] = await db.insert(studentAssessments)

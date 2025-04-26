@@ -65,6 +65,23 @@ export default function GradingTableClient({
     allWeeks, // Use pre-calculated weeks from server
 }: GradingTableClientProps) {
 
+    // --- Log props received by client ---
+    console.log('[GradingTable Client] Received Props:', {
+        classId: classData.id,
+        currentWeek: formatDate(currentWeek),
+        plannedItemsCount: plannedItems.length,
+        plannedItemsSample: plannedItems.slice(0, 5).map(p => ({ id: p.id, name: p.contentGroup.name })), // Log first 5 planned item IDs/names
+        initialAssessmentsCount: initialAssessments.length,
+        initialAssessmentsSample: initialAssessments.slice(0, 10).map(a => ({ // Log first 10 assessment details
+            id: a.id,
+            enrollmentId: a.studentEnrollmentId,
+            planId: a.classCurriculumPlanId,
+            gradeId: a.gradeScaleId,
+            date: a.assessmentDate
+        }))
+    });
+    // --- End Logging ---
+
     const [assessments, setAssessments] = useState<StudentAssessment[]>(initialAssessments);
     const [isPending, startTransition] = useTransition();
     const router = useRouter();
@@ -135,7 +152,7 @@ export default function GradingTableClient({
                 contentGroupId,
                 contentPointId: null,
                 gradeScaleId: newGradeScaleId,
-                assessmentDate: new Date(),
+                assessmentDate: currentWeek,
                 notes: existingAssessment?.notes ?? null,
                 createdAt: existingAssessment?.createdAt ?? new Date(),
                 updatedAt: new Date(),
@@ -161,6 +178,7 @@ export default function GradingTableClient({
                 gradeScaleId: newGradeScaleId, // Assured not null by logic above
                 notes: existingAssessment?.notes ?? null,
                 assessmentIdToUpdate: existingAssessment?.id, // Pass ID if updating
+                weekStartDate: formatDate(currentWeek) // Pass the correct week start date string
             }).then(result => {
                 if (result.error) {
                     toast.error(`Failed to save grade: ${result.error}`);
@@ -291,11 +309,17 @@ export default function GradingTableClient({
 
                                 {/* Grading Cells - Dynamic width */}
                                 {plannedItems.map((item) => {
+                                    // Find assessment in local state
                                     const existingAssessment = assessments.find(
                                         a => a.studentEnrollmentId === enrollment.id &&
                                             a.classCurriculumPlanId === item.id &&
                                             a.contentPointId === null
                                     );
+                                    // --- Log matching logic ---
+                                    console.log(`[GradingTable Client Cell] Trying to match: StudentEnrollmentId=${enrollment.id}, PlannedItemId=${item.id}`);
+                                    console.log(`[GradingTable Client Cell] Found Assessment:`, existingAssessment ? { id: existingAssessment.id, gradeId: existingAssessment.gradeScaleId } : null);
+                                    // --- End Logging ---
+                                    // Use state for the select value to reflect optimistic updates
                                     const currentGradeScaleId = existingAssessment?.gradeScaleId;
 
                                     return (

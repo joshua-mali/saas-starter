@@ -1,0 +1,1 @@
+ALTER TABLE "teams" ADD COLUMN "teacher_limit" integer DEFAULT 3 NOT NULL;
