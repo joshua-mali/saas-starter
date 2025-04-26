@@ -3,11 +3,11 @@
 import { inviteTeamMember } from '@/app/(login)/actions';
 import { Button } from '@/components/ui/button';
 import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle
+    Card,
+    CardContent,
+    CardFooter,
+    CardHeader,
+    CardTitle
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,9 +24,15 @@ type ActionState = {
 
 interface InviteTeamMemberProps {
   teamId: number;
+  currentMemberCount: number;
+  memberLimit: number;
 }
 
-export function InviteTeamMember({ teamId }: InviteTeamMemberProps) {
+export function InviteTeamMember({ 
+  teamId, 
+  currentMemberCount, 
+  memberLimit 
+}: InviteTeamMemberProps) {
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -80,6 +86,7 @@ export function InviteTeamMember({ teamId }: InviteTeamMemberProps) {
   }, [supabase, teamId]);
 
   const isOwner = userRole === 'owner';
+  const isLimitReached = currentMemberCount >= memberLimit;
 
   if (loading) {
     return (
@@ -109,7 +116,7 @@ export function InviteTeamMember({ teamId }: InviteTeamMemberProps) {
               type="email"
               placeholder="Enter email"
               required
-              disabled={!isOwner || isInvitePending}
+              disabled={!isOwner || isInvitePending || isLimitReached}
             />
           </div>
           <div>
@@ -118,7 +125,7 @@ export function InviteTeamMember({ teamId }: InviteTeamMemberProps) {
               defaultValue="member"
               name="role"
               className="flex space-x-4"
-              disabled={!isOwner || isInvitePending}
+              disabled={!isOwner || isInvitePending || isLimitReached}
             >
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="member" id="member" />
@@ -139,12 +146,12 @@ export function InviteTeamMember({ teamId }: InviteTeamMemberProps) {
           <Button
             type="submit"
             className="bg-orange-500 hover:bg-orange-600 text-white"
-            disabled={isInvitePending || !isOwner}
+            disabled={isInvitePending || !isOwner || isLimitReached}
           >
             {isInvitePending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Inviting...
+                {isLimitReached ? 'Limit Reached' : 'Inviting...'}
               </>
             ) : (
               <>
@@ -155,10 +162,13 @@ export function InviteTeamMember({ teamId }: InviteTeamMemberProps) {
           </Button>
         </form>
       </CardContent>
-      {!isOwner && !loading && (
+      {(!isOwner || isLimitReached) && !loading && (
         <CardFooter>
           <p className="text-sm text-muted-foreground">
-            You must be a team owner to invite new members.
+            {isLimitReached 
+              ? `You have reached the maximum number of members (${memberLimit}) for your current plan. Remove a member or upgrade your plan to invite more.` 
+              : 'You must be a team owner to invite new members.'
+            }
           </p>
         </CardFooter>
       )}

@@ -25,6 +25,8 @@ type TeamSettingsProps = {
   teamData: Team & {
     teamMembers: MemberWithDisplayUser[];
   };
+  currentMemberCount: number;
+  memberLimit: number;
 };
 
 type ActionState = {
@@ -38,7 +40,11 @@ const getUserDisplayName = (user: DisplayUser) => {
 };
 
 // --- New Component --- 
-export function TeamSettings({ teamData }: TeamSettingsProps) {
+export function TeamSettings({ 
+  teamData, 
+  currentMemberCount, 
+  memberLimit 
+}: TeamSettingsProps) {
   // Team Member Removal State (Copied from original Settings)
   const [removeState, removeAction, isRemovePending] = useActionState<
     ActionState,
@@ -80,7 +86,12 @@ export function TeamSettings({ teamData }: TeamSettingsProps) {
       {/* --- Team Members Card --- */}
       <Card>
         <CardHeader>
-          <CardTitle>Team Members</CardTitle>
+          <div className="flex justify-between items-center">
+            <CardTitle>Team Members</CardTitle>
+            <span className="text-sm text-muted-foreground">
+              ({teamData.teamMembers.length} / {memberLimit} members)
+            </span>
+          </div>
         </CardHeader>
         <CardContent>
           <ul className="space-y-4">
@@ -131,7 +142,11 @@ export function TeamSettings({ teamData }: TeamSettingsProps) {
       </Card>
       
       {/* --- Invite Team Member Card --- */}
-      <InviteTeamMember teamId={teamData.id} />
+      <InviteTeamMember 
+        teamId={teamData.id} 
+        currentMemberCount={currentMemberCount}
+        memberLimit={memberLimit}
+      />
     </div>
   );
 } 

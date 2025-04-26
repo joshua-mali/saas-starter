@@ -10,12 +10,14 @@ import {
   invitations,
   profiles,
   teamMembers,
+  teams,
   type NewActivityLog,
   type NewTeamMember,
   type TeamMember
 } from '@/lib/db/schema';
+import { getMemberLimit } from '@/lib/plans';
 import { createClient } from '@/lib/supabase/server';
-import { and, eq } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
@@ -137,6 +139,36 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       if (isNaN(teamIdNum)) {
         throw new Error(`Invalid teamId received: ${teamId}`);
       }
+
+      // --- Check Team Member Limit BEFORE Adding Member ---
+      try {
+        const [teamData] = await db.select({ 
+          planName: teams.planName, 
+          memberCount: count(teamMembers.id) 
+        })
+        .from(teams)
+        .leftJoin(teamMembers, eq(teams.id, teamMembers.teamId))
+        .where(eq(teams.id, teamIdNum)) // Use parsed teamIdNum
+        .groupBy(teams.id);
+
+        if (!teamData) {
+          // This shouldn't happen if the invitation was valid, but check anyway
+          console.error(`Sign Up: Team not found (ID: ${teamIdNum}) during invite processing.`);
+          return { error: 'Invited team not found.' };
+        }
+
+        const limit = getMemberLimit(teamData.planName);
+        // Check if adding ONE more member would exceed the limit
+        if (teamData.memberCount >= limit) {
+          console.warn(`Sign Up: Team ${teamIdNum} is full (Limit: ${limit}, Current: ${teamData.memberCount}). Cannot add user ${user.id}.`);
+          return { error: `The team you were invited to has reached its member limit (${limit}) for the current plan.` };
+        }
+      } catch (dbError) {
+        console.error(`Sign Up: Database error checking team member limit for team ${teamIdNum}:`, dbError);
+        return { error: "Database error verifying team capacity." };
+      }
+      // --- End Limit Check ---
+
       const newMemberData: NewTeamMember = {
         userId: user.id,
         teamId: teamIdNum,
@@ -146,18 +178,25 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       console.log(`Successfully inserted user ${user.id} into team_members for team ${teamIdNum}`);
 
       // 2. Update the invitation status to 'accepted'
-      // Ensure you have imported `invitations` table definition
-      const updateResult = await db.update(invitations)
-         .set({ status: 'accepted' })
-         .where(eq(invitations.token, inviteToken)) // Use the inviteToken from input
-         .returning({ id: invitations.id }); // Add returning clause
-      
-      // Check if any rows were returned (indicating an update occurred)
-      if (updateResult.length > 0) {
-          console.log(`Successfully updated invitation status for token ${inviteToken}`);
+      let updateResult: { id: number }[] = []; // Declare outside the block
+      // Ensure user and inviteToken are valid before proceeding
+      if (!user || !inviteToken) { // Add null check for user
+         console.error("Sign Up: User or inviteToken became null/undefined unexpectedly during invite processing.");
+         // Don't necessarily error out the whole sign-up, but log it.
+         // The user is already in the team at this point.
       } else {
-          console.warn(`Could not find or update invitation status for token ${inviteToken}. It might have expired or already been used.`);
-          // Decide if this should be an error for the user - probably not, as they are now in the team.
+          updateResult = await db.update(invitations)
+             .set({ status: 'accepted' })
+             .where(eq(invitations.token, inviteToken as string)) // Assert inviteToken is string
+             .returning({ id: invitations.id }); // Add returning clause
+         
+         // Check if any rows were returned (indicating an update occurred)
+         if (updateResult.length > 0) {
+             console.log(`Successfully updated invitation status for token ${inviteToken}`);
+         } else {
+             console.warn(`Could not find or update invitation status for token ${inviteToken}. It might have expired or already been used.`);
+             // Decide if this should be an error for the user - probably not, as they are now in the team.
+         }
       }
 
       // 3. Clean up invite cookie (if accept-invite route sets one - check that route)
@@ -518,6 +557,31 @@ export const inviteTeamMember = validatedAction(
     }
 
     const inviterTeamId = inviterMembership.teamId;
+
+    // --- Check Team Member Limit BEFORE Creating Invitation ---
+    try {
+        const [teamData] = await db.select({ 
+                planName: teams.planName, 
+                memberCount: count(teamMembers.id) 
+            })
+            .from(teams)
+            .leftJoin(teamMembers, eq(teams.id, teamMembers.teamId))
+            .where(eq(teams.id, inviterTeamId))
+            .groupBy(teams.id);
+
+        if (!teamData) {
+            return { error: 'Team not found.' };
+        }
+
+        const limit = getMemberLimit(teamData.planName);
+        if (teamData.memberCount >= limit) {
+            return { error: `Team has reached its member limit (${limit}) for the current plan.` };
+        }
+    } catch (dbError) {
+        console.error("Database error checking team member limit:", dbError);
+        return { error: "Database error checking team limit." };
+    }
+    // --- End Limit Check ---
 
     // 4. Check for existing PENDING invitation (Optional but good practice)
     try {

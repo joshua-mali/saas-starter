@@ -11,6 +11,8 @@ import {
   teamMembers,
   teams,
 } from '@/lib/db/schema';
+// Import getMemberLimit helper
+import { getMemberLimit } from '@/lib/plans';
 // Import logActivity types if needed
 // import { logActivity, ActivityType } from '@/app/(login)/actions';
 
@@ -97,9 +99,13 @@ export default async function DashboardPage() {
     throw new Error(`Team not found for ID: ${teamIdToLoad}`);
   }
 
+  // Calculate member limit
+  const memberLimit = getMemberLimit(team.planName);
+
   // Adapt data structure
   const adaptedTeamData = {
     ...team, // Spread basic team info
+    memberLimit, // Add the calculated limit
     teamMembers: membersWithProfiles.map((member) => ({
       id: member.memberId,
       userId: member.userId,
@@ -119,7 +125,11 @@ export default async function DashboardPage() {
   return (
     <div className="p-4 lg:p-8">
       <h1 className="text-lg lg:text-2xl font-medium mb-6">Team & Subscription</h1>
-      <TeamSettings teamData={adaptedTeamData as any} />
+      <TeamSettings 
+        teamData={adaptedTeamData as any} 
+        currentMemberCount={adaptedTeamData.teamMembers.length}
+        memberLimit={adaptedTeamData.memberLimit}
+      />
     </div>
   );
 }
