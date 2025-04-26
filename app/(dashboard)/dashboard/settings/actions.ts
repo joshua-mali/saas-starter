@@ -1,7 +1,7 @@
 'use server'
 
 import { db } from '@/lib/db/drizzle';
-import { NewTerm, teamMembers, terms } from '@/lib/db/schema';
+import { gradeScales, NewTerm, teamMembers, terms } from '@/lib/db/schema';
 import { createClient } from '@/lib/supabase/server';
 import { eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
@@ -113,4 +113,87 @@ export async function saveTermDates(prevState: ActionState, formData: FormData):
     console.error("Error saving term dates:", error);
     return { error: 'Database error occurred while saving term dates.', success: false };
   }
+}
+
+// --- NEW: Update Grade Scales Action ---
+export async function updateGradeScales(prevState: ActionState, formData: FormData): Promise<ActionState> {
+    const supabase = await createClient();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    // Basic auth check (consider role-based access if needed later)
+    if (authError || !user) {
+        return { error: 'User not authenticated', success: false };
+    }
+
+    const updates: { id: number; name: string; description: string | null }[] = [];
+    const validationErrors: string[] = [];
+    const submittedIds = new Set<number>();
+
+    // 1. Parse FormData
+    const scaleDataById: Record<number, Partial<{ name: string; description: string }>> = {};
+    for (const [key, value] of formData.entries()) {
+        if (key.startsWith('id_')) {
+            const id = parseInt(value as string, 10);
+            if (!isNaN(id)) submittedIds.add(id);
+        } else if (key.startsWith('name_')) {
+            const id = parseInt(key.split('_')[1], 10);
+            if (!isNaN(id)) {
+                if (!scaleDataById[id]) scaleDataById[id] = {};
+                scaleDataById[id].name = value as string;
+            }
+        } else if (key.startsWith('description_')) {
+            const id = parseInt(key.split('_')[1], 10);
+            if (!isNaN(id)) {
+                if (!scaleDataById[id]) scaleDataById[id] = {};
+                scaleDataById[id].description = (value as string) || null; // Store null if empty
+            }
+        }
+    }
+
+    // 2. Validate and Prepare Updates
+    for (const id of submittedIds) {
+        const data = scaleDataById[id];
+        if (!data || typeof data.name !== 'string' || data.name.trim() === '') {
+            validationErrors.push(`Missing or empty name for scale ID ${id}.`);
+            continue;
+        }
+        // Revert: Use description as parsed (string | null)
+        updates.push({
+            id: id,
+            name: data.name.trim(),
+            description: data.description === undefined ? null : data.description, 
+        });
+    }
+
+    if (validationErrors.length > 0) {
+        return { error: validationErrors.join('\n'), success: false };
+    }
+
+    if (updates.length === 0) {
+        return { error: 'No valid grade scale data submitted for update.', success: false };
+    }
+
+    // 3. Database Operation
+    try {
+        await db.transaction(async (tx) => {
+            for (const update of updates) {
+                await tx.update(gradeScales)
+                        .set({
+                            name: update.name,
+                            description: update.description as any, // Force type bypass
+                            updatedAt: new Date(),
+                        })
+                        .where(eq(gradeScales.id, update.id));
+            }
+        });
+
+        revalidatePath('/dashboard/settings'); // Revalidate the settings page
+        // Potentially revalidate other paths where grade scale names might be displayed
+
+        return { success: true, error: null };
+
+    } catch (dbError) {
+        console.error("Error updating grade scales:", dbError);
+        return { error: 'Database error occurred while updating grade scales.', success: false };
+    }
 } 

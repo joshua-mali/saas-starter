@@ -6,16 +6,17 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { Term } from '@/lib/db/schema';
+import type { GradeScale, Term } from '@/lib/db/schema';
 import { Loader2, Lock, Trash2 } from 'lucide-react';
 import { startTransition, useActionState, useEffect, useRef } from 'react';
 import { useFormStatus } from 'react-dom';
 import { toast } from 'sonner';
-import { saveTermDates } from './settings/actions';
+import { saveTermDates, updateGradeScales } from './settings/actions';
 
 type SettingsProps = {
   initialTerms: Term[];
   calendarYear: number;
+  gradeScales: GradeScale[];
 };
 
 type ActionState = {
@@ -39,7 +40,16 @@ function TermSubmitButton() {
   );
 }
 
-export function Settings({ initialTerms, calendarYear }: SettingsProps) {
+function GradeScaleSubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" disabled={pending} aria-disabled={pending}>
+      {pending ? 'Saving Scales...' : 'Save Grading Scale'}
+    </Button>
+  );
+}
+
+export function Settings({ initialTerms, calendarYear, gradeScales }: SettingsProps) {
   const [termState, termAction] = useActionState(saveTermDates, { error: null, success: false });
   const termFormRef = useRef<HTMLFormElement>(null);
   const initialTermMap = new Map(initialTerms.map(t => [t.termNumber, t]));
@@ -53,6 +63,9 @@ export function Settings({ initialTerms, calendarYear }: SettingsProps) {
     ActionState,
     FormData
   >(deleteAccount, { error: '', success: '' });
+
+  const [scaleState, scaleAction] = useActionState(updateGradeScales, { error: null, success: false });
+  const scaleFormRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (termState.error) {
@@ -76,6 +89,14 @@ export function Settings({ initialTerms, calendarYear }: SettingsProps) {
     }
   }, [deleteState]);
 
+  useEffect(() => {
+    if (scaleState.error) {
+      toast.error(scaleState.error);
+    } else if (scaleState.success) {
+      toast.success('Grading scale updated successfully!');
+    }
+  }, [scaleState]);
+
   const handlePasswordSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     startTransition(() => {
@@ -92,9 +113,10 @@ export function Settings({ initialTerms, calendarYear }: SettingsProps) {
 
   return (
     <Tabs defaultValue="terms" className="w-full">
-      <TabsList className="grid w-full grid-cols-2 mb-6">
+      <TabsList className="grid w-full grid-cols-3 mb-6">
         <TabsTrigger value="terms">Term Dates</TabsTrigger>
         <TabsTrigger value="security">Security</TabsTrigger>
+        <TabsTrigger value="grading">Grading Scale</TabsTrigger>
       </TabsList>
 
       <TabsContent value="terms">
@@ -246,6 +268,52 @@ export function Settings({ initialTerms, calendarYear }: SettingsProps) {
               </Button>
             </form>
           </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="grading">
+        <Card>
+          <CardHeader>
+            <CardTitle>Grading Scale Names</CardTitle>
+            <CardDescription>
+              Define the names and descriptions for each grading level. Numeric values are fixed.
+            </CardDescription>
+          </CardHeader>
+          <form ref={scaleFormRef} action={scaleAction}>
+            <CardContent className="space-y-4">
+              {gradeScales.map((scale) => (
+                <div key={scale.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center border-b pb-4 last:border-b-0 last:pb-0">
+                  <div className="space-y-1 md:col-span-1">
+                    <Label>Numeric Value</Label>
+                    <p className="font-mono text-lg px-3 py-2">{scale.numericValue}</p>
+                    <input type="hidden" name={`id_${scale.id}`} value={scale.id} />
+                  </div>
+                  <div className="space-y-1 md:col-span-1">
+                    <Label htmlFor={`name_${scale.id}`}>Display Name</Label>
+                    <Input
+                      id={`name_${scale.id}`}
+                      name={`name_${scale.id}`}
+                      defaultValue={scale.name ?? ''}
+                      required
+                      maxLength={50}
+                    />
+                  </div>
+                  <div className="space-y-1 md:col-span-1">
+                    <Label htmlFor={`description_${scale.id}`}>Description (Optional)</Label>
+                    <Input
+                      id={`description_${scale.id}`}
+                      name={`description_${scale.id}`}
+                      defaultValue={scale.description ?? ''}
+                      maxLength={200}
+                    />
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+            <CardFooter>
+              <GradeScaleSubmitButton />
+            </CardFooter>
+          </form>
         </Card>
       </TabsContent>
 
