@@ -2,12 +2,23 @@
 
 // Subset of imports needed for Team settings only
 import { removeTeamMember } from '@/app/(login)/actions';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type { Team, TeamMember } from '@/lib/db/schema';
 import { customerPortalAction } from '@/lib/payments/actions';
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { InviteTeamMember } from './invite-team';
 
 // --- Types --- (Copied from original Settings)
@@ -50,6 +61,9 @@ export function TeamSettings({
     ActionState,
     FormData
   >(removeTeamMember, { error: '', success: '' });
+
+  // State for managing the confirmation dialog
+  const [memberToRemove, setMemberToRemove] = useState<MemberWithDisplayUser | null>(null);
 
   return (
     <div className="space-y-8">
@@ -120,17 +134,42 @@ export function TeamSettings({
                   </div>
                 </div>
                 {teamData.teamMembers.length > 1 && member.role !== 'owner' && (
-                  <form action={removeAction}>
-                    <input type="hidden" name="memberId" value={member.id} />
-                    <Button
-                      type="submit"
-                      variant="outline"
-                      size="sm"
-                      disabled={isRemovePending}
-                    >
-                      {isRemovePending ? 'Removing...' : 'Remove'}
-                    </Button>
-                  </form>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isRemovePending}
+                        onClick={() => setMemberToRemove(member)}
+                      >
+                        Remove
+                      </Button>
+                    </AlertDialogTrigger>
+                    {memberToRemove && (
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This action will remove '{getUserDisplayName(memberToRemove.user)}' from the team. They will lose access immediately. This cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel onClick={() => setMemberToRemove(null)}>Cancel</AlertDialogCancel>
+                          <form action={removeAction} className="inline">
+                            <input type="hidden" name="memberId" value={memberToRemove.id} />
+                            <AlertDialogAction 
+                              type="submit"
+                              disabled={isRemovePending}
+                              className="bg-red-600 hover:bg-red-700 text-white"
+                            >
+                              {isRemovePending ? 'Removing...' : 'Confirm Remove'}
+                            </AlertDialogAction>
+                          </form>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    )}
+                  </AlertDialog>
                 )}
               </li>
             ))}
