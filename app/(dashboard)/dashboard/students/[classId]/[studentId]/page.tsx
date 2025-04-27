@@ -239,15 +239,14 @@ function processStudentGrades(
 }
 
 interface StudentOverviewPageProps {
-    params: {
-        classId: string;
-        studentId: string;
-    };
+    params: Promise<{ classId: string; studentId: string; }>;
+    // searchParams?: Promise<{ [key: string]: string | string[] | undefined }>; // Add if needed
 }
 
 export default async function StudentOverviewPage({
-    params: { classId: rawClassId, studentId: rawStudentId }
+    params: paramsPromise
 }: StudentOverviewPageProps) {
+    const { classId: rawClassId, studentId: rawStudentId } = await paramsPromise;
 
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();

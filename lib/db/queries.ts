@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { db } from './drizzle';
-import { teams } from './schema';
+import { ActivityLog, teams } from './schema';
 
 export async function getTeamByStripeCustomerId(customerId: string) {
   const result = await db
@@ -37,7 +37,7 @@ export async function updateTeamSubscription(
     .where(eq(teams.id, teamId));
 }
 
-export async function getActivityLogs() {
+export async function getActivityLogs(): Promise<ActivityLog[]> {
   console.warn("TODO: Refactor getActivityLogs function in lib/db/queries.ts")
   return []; // Return empty array for now
 }

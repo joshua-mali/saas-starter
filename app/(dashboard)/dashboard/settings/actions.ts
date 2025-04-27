@@ -130,7 +130,7 @@ export async function updateGradeScales(prevState: ActionState, formData: FormDa
     const submittedIds = new Set<number>();
 
     // 1. Parse FormData
-    const scaleDataById: Record<number, Partial<{ name: string; description: string }>> = {};
+    const scaleDataById: Record<number, { name?: string; description?: string | null }> = {};
     for (const [key, value] of formData.entries()) {
         if (key.startsWith('id_')) {
             const id = parseInt(value as string, 10);
@@ -145,7 +145,7 @@ export async function updateGradeScales(prevState: ActionState, formData: FormDa
             const id = parseInt(key.split('_')[1], 10);
             if (!isNaN(id)) {
                 if (!scaleDataById[id]) scaleDataById[id] = {};
-                scaleDataById[id].description = (value as string) || null; // Store null if empty
+                scaleDataById[id].description = (value as string) || null; 
             }
         }
     }
@@ -157,11 +157,10 @@ export async function updateGradeScales(prevState: ActionState, formData: FormDa
             validationErrors.push(`Missing or empty name for scale ID ${id}.`);
             continue;
         }
-        // Revert: Use description as parsed (string | null)
         updates.push({
             id: id,
             name: data.name.trim(),
-            description: data.description === undefined ? null : data.description, 
+            description: data.description ?? null,
         });
     }
 
@@ -180,7 +179,7 @@ export async function updateGradeScales(prevState: ActionState, formData: FormDa
                 await tx.update(gradeScales)
                         .set({
                             name: update.name,
-                            description: update.description as any, // Force type bypass
+                            description: update.description,
                             updatedAt: new Date(),
                         })
                         .where(eq(gradeScales.id, update.id));

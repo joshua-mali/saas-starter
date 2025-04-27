@@ -85,15 +85,16 @@ async function getExistingPlan(classId: number): Promise<ClassCurriculumPlanItem
 // --- Page Component Props Interface ---
 
 interface PlanningPageProps {
-  searchParams: {
-    classId?: string;
-  }
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
 // --- Page Component ---
 
-export default async function PlanningPage({ searchParams }: PlanningPageProps) {
-  const { classId: rawClassId } = searchParams;
+export default async function PlanningPage({ searchParams: searchParamsPromise }: PlanningPageProps) {
+  const searchParams = await searchParamsPromise;
+  // Handle potential arrays from searchParams
+  const rawClassId = Array.isArray(searchParams.classId) ? searchParams.classId[0] : searchParams.classId;
+
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
 

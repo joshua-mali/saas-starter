@@ -34,6 +34,7 @@
                     └── 📁[studentId]
                         └── client.tsx
                         └── page.tsx
+                └── 📁[studentId]
                 └── actions.ts
                 └── client.tsx
                 └── page.tsx
@@ -44,6 +45,7 @@
             └── page.tsx
             └── submit-button.tsx
         └── terminal.tsx
+        └── user-menu.tsx
     └── 📁(login)
         └── actions.ts
         └── login.tsx

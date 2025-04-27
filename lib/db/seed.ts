@@ -1,7 +1,4 @@
 import { stripe } from '../payments/stripe';
-import { db } from './drizzle';
-import { users, teams, teamMembers } from './schema';
-import { hashPassword } from '@/lib/auth/session';
 
 async function createStripeProducts() {
   console.log('Creating Stripe products and prices...');
@@ -39,46 +36,26 @@ async function createStripeProducts() {
   console.log('Stripe products and prices created successfully.');
 }
 
-async function seed() {
-  const email = 'test@test.com';
-  const password = 'admin123';
-  const passwordHash = await hashPassword(password);
+async function seedDatabase() {
+  console.log('Seeding database...');
 
-  const [user] = await db
-    .insert(users)
-    .values([
-      {
-        email: email,
-        passwordHash: passwordHash,
-        role: "owner",
-      },
-    ])
-    .returning();
-
-  console.log('Initial user created.');
-
-  const [team] = await db
-    .insert(teams)
-    .values({
-      name: 'Test Team',
-    })
-    .returning();
-
-  await db.insert(teamMembers).values({
-    teamId: team.id,
-    userId: user.id,
-    role: 'owner',
-  });
-
+  // 1. Create Stripe Products (keep this)
   await createStripeProducts();
+  console.log('Stripe products created or verified.');
+
+  // --- REMOVE USER AND TEAM CREATION BLOCK ---
+  // This section attempted to insert directly into auth.users, which is incorrect.
+  // User/team creation for seeding should ideally use Supabase client functions or API calls.
+  // Example using Supabase client (if needed later):
+  // const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
+  // if (authError) throw authError;
+  // const userId = authData.user?.id;
+  // ... create team and link member ...
+
+  console.log('Database seeding complete.');
 }
 
-seed()
-  .catch((error) => {
-    console.error('Seed process failed:', error);
-    process.exit(1);
-  })
-  .finally(() => {
-    console.log('Seed process finished. Exiting...');
-    process.exit(0);
-  });
+seedDatabase().catch((error) => {
+  console.error('Error seeding database:', error);
+  process.exit(1);
+});

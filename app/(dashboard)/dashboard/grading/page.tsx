@@ -157,16 +157,17 @@ async function getTermsForYear(teamId: number, calendarYear: number): Promise<Te
 
 // --- Page Component Props Interface ---
 interface GradingPageProps {
-    searchParams: {
-        classId?: string; // Class ID now from query params
-        week?: string;    // Optional week start date (YYYY-MM-DD)
-    }
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
 // --- Page Component (Use standard destructuring) ---
 
-export default async function GradingPage({ searchParams }: GradingPageProps) {
-    const { classId: rawClassId, week } = searchParams; // Get classId from searchParams
+export default async function GradingPage({ searchParams: searchParamsPromise }: GradingPageProps) {
+    const searchParams = await searchParamsPromise;
+    // Handle potential arrays from searchParams
+    const rawClassId = Array.isArray(searchParams.classId) ? searchParams.classId[0] : searchParams.classId;
+    const week = Array.isArray(searchParams.week) ? searchParams.week[0] : searchParams.week;
+
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 

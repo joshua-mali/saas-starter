@@ -340,15 +340,18 @@ function processStudentGradesForReport(
     };
 }
 
-// --- Page Component ---
+// --- Page Component Props Interface ---
 
 interface ClassReportPageProps {
-    params: {
-        classId: string;
-    };
+    params: Promise<{ classId: string; }>;
+    // searchParams?: { [key: string]: string | string[] | undefined }; // Add if you use searchParams
 }
 
-export default async function ClassReportPage({ params: { classId: rawClassId } }: ClassReportPageProps) {
+// --- Page Component ---
+
+export default async function ClassReportPage({ params: paramsPromise }: ClassReportPageProps) {
+    const { classId: rawClassId } = await paramsPromise;
+
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 

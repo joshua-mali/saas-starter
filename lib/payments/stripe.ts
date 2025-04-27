@@ -1,6 +1,6 @@
 import {
-  getTeamByStripeCustomerId,
-  updateTeamSubscription
+    getTeamByStripeCustomerId,
+    updateTeamSubscription
 } from '@/lib/db/queries';
 import { Team } from '@/lib/db/schema';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
@@ -127,18 +127,22 @@ export async function handleSubscriptionChange(
 
   if (status === 'active' || status === 'trialing') {
     const plan = subscription.items.data[0]?.plan;
+    const teacherLimit = parseInt(plan?.metadata?.teacherLimit || '0', 10) || 0;
     await updateTeamSubscription(team.id, {
       stripeSubscriptionId: subscriptionId,
       stripeProductId: plan?.product as string,
       planName: (plan?.product as Stripe.Product).name,
-      subscriptionStatus: status
+      subscriptionStatus: status,
+      teacherLimit: teacherLimit
     });
   } else if (status === 'canceled' || status === 'unpaid') {
+    const defaultTeacherLimit = 1;
     await updateTeamSubscription(team.id, {
       stripeSubscriptionId: null,
       stripeProductId: null,
       planName: null,
-      subscriptionStatus: status
+      subscriptionStatus: status,
+      teacherLimit: defaultTeacherLimit
     });
   }
 }
