@@ -130,3 +130,5 @@ The Grade Tracker Application is a comprehensive tool designed for schools to ma
    - Caching strategies
 
 Remember to implement features incrementally, ensuring each component works properly before moving to the next. The system should remain extensible to accommodate future enhancements.
+
+Pushing to main branch for vercel deployment
