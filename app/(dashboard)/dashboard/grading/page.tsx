@@ -164,9 +164,9 @@ interface GradingPageProps {
 
 export default async function GradingPage({ searchParams: searchParamsPromise }: GradingPageProps) {
     const searchParams = await searchParamsPromise;
-    // Handle potential arrays from searchParams
     const rawClassId = Array.isArray(searchParams.classId) ? searchParams.classId[0] : searchParams.classId;
-    const week = Array.isArray(searchParams.week) ? searchParams.week[0] : searchParams.week;
+    const weekParam = Array.isArray(searchParams.week) ? searchParams.week[0] : searchParams.week;
+    const wasWeekRequested = !!weekParam; // Track if a specific week was requested
 
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -175,11 +175,10 @@ export default async function GradingPage({ searchParams: searchParamsPromise }:
         redirect('/sign-in');
     }
 
-    // --- Fetch User's Team and Taught Classes (Needed for default selection/validation) ---
     const userTeamId = await getUserTeam(user.id);
     if (!userTeamId) {
         console.error("User is not part of any team.");
-        return <div>Error: You are not part of a team.</div>; // Handle appropriately
+        return <div>Error: You are not part of a team.</div>;
     }
 
     const [userTaughtClasses, allTeamClasses] = await Promise.all([
@@ -187,153 +186,98 @@ export default async function GradingPage({ searchParams: searchParamsPromise }:
         getTeamClasses(userTeamId)
     ]);
 
-    // --- Determine the Class ID to use ---
     let classId: number | null = null;
     if (rawClassId) {
         const parsedId = parseInt(rawClassId, 10);
         if (!isNaN(parsedId) && allTeamClasses.some(c => c.id === parsedId)) {
-            // If valid classId is provided and belongs to the team, use it
             classId = parsedId;
         } else {
              console.warn(`Invalid or unauthorized classId requested: ${rawClassId}.`);
-             // Optionally fall back to default or show an error/selection prompt
         }
     }
-
-    // If no valid classId from URL, default to the first class the user teaches
     if (classId === null && userTaughtClasses.length > 0) {
         classId = userTaughtClasses[0].id;
-        // Optionally, redirect to include the default classId in the URL?
-        // redirect(`/dashboard/grading?classId=${classId}${week ? `&week=${week}` : ''}`);
-        // For now, just use it internally.
     }
-
     if (classId === null) {
-        // No classId from URL and user teaches no classes
-        // TODO: Show a message asking the user to select a class from the layout dropdown
-        // Or handle based on how the layout dropdown behaves when no class is selected
         return (
             <div className="p-4">
                 Please select a class from the dropdown above to view grading.
-                {/* Alternatively, render a Class Selection component here */}
             </div>
         );
     }
 
-    // --- Authorization Check (Check if selected class belongs to the team) ---
-    // Already implicitly checked when setting classId
-    // const classBelongsToTeam = allTeamClasses.some(c => c.id === classId);
-    // if (!classBelongsToTeam) {
-    //     notFound(); 
-    // }
-    // We might still want to check if the user *teaches* this class for stricter access,
-    // but the requirement was to allow viewing any team class.
-
-    // Determine the week string and Date object (parsed as UTC)
+    // Determine the target week string and Date object
     let targetWeekString: string;
-    if (week && /^\d{4}-\d{2}-\d{2}$/.test(week)) {
-        targetWeekString = week;
+    if (weekParam && /^\d{4}-\d{2}-\d{2}$/.test(weekParam)) {
+        targetWeekString = weekParam;
     } else {
-        targetWeekString = formatDate(getCurrentWeekStartDate()); // YYYY-MM-DD
+        targetWeekString = formatDate(getCurrentWeekStartDate());
     }
-    const targetWeekDate = new Date(`${targetWeekString}T00:00:00Z`); // UTC Midnight Date object
+    const targetWeekDate = new Date(`${targetWeekString}T00:00:00Z`);
 
-    // --- Fetch Data Concurrently (Using the determined classId) ---
-    const classData = await getClassDetails(classId, user.id); // Pass determined classId
+    // Fetch essential data
+    const classData = await getClassDetails(classId, user.id);
     if (!classData) {
-        // This shouldn't happen if classId was validated against allTeamClasses, but check anyway
         notFound();
     }
-
-    // Pass the Date object and determined classId to fetch functions
-    const [studentsData, gradeScalesData, plannedItemsData, termsData] = await Promise.all([
+    const [studentsData, gradeScalesData, termsData] = await Promise.all([
         getEnrolledStudents(classId),
         getGradeScales(classData.teamId),
-        getPlannedItemsForWeek(classId, targetWeekDate),
         getTermsForYear(classData.teamId, classData.calendarYear),
     ]);
 
-    // Calculate allWeeks using UTC-based dates
+    // Fetch initial planned items and assessments for the target week
+    let plannedItemsData = await getPlannedItemsForWeek(classId, targetWeekDate);
+    let assessmentsData = plannedItemsData.length > 0 
+        ? await getExistingAssessments(studentsData.map(s => s.id), targetWeekDate)
+        : [];
+
+    // Calculate allWeeks
     const allWeeks = termsData.flatMap(term => {
         const termStart = new Date(`${formatDate(term.startDate)}T00:00:00Z`);
         const termEnd = new Date(`${formatDate(term.endDate)}T00:00:00Z`);
-        if (!isNaN(termStart.getTime()) && !isNaN(termEnd.getTime())) {
-            return getWeeksBetween(termStart, termEnd); // Ensure getWeeksBetween also works with UTC dates
-        }
-        return [];
+        return (!isNaN(termStart.getTime()) && !isNaN(termEnd.getTime())) ? getWeeksBetween(termStart, termEnd) : [];
     }).sort((a, b) => a.getTime() - b.getTime());
 
-    // --- Week Fallback Logic ---
+    // --- MODIFIED: Fallback Logic - Only apply if NO specific week was requested --- 
     let finalTargetWeekDate = targetWeekDate;
-    let finalPlannedItemsData = plannedItemsData;
-    let finalAssessmentsData: StudentAssessment[] = []; // Initialize assessment data array
 
-    if (finalPlannedItemsData.length === 0 && allWeeks.length > 0) {
-        console.log(`[GradingPage Server] No planned items for ${targetWeekDate.toISOString()}. Finding fallback week.`);
-        // Find the latest week in allWeeks <= original targetWeekDate
+    if (!wasWeekRequested && plannedItemsData.length === 0 && allWeeks.length > 0) {
+        console.log(`[GradingPage Server] Initial load has no items for current week ${targetWeekDate.toISOString()}. Finding fallback.`);
         const potentialFallbackWeeks = allWeeks.filter(w => w.getTime() <= targetWeekDate.getTime());
-        let fallbackWeekDate: Date | null = null;
-
-        if (potentialFallbackWeeks.length > 0) {
-            fallbackWeekDate = potentialFallbackWeeks[potentialFallbackWeeks.length - 1];
-        } else {
-            // If no week is before or equal, use the very last week available
-            fallbackWeekDate = allWeeks[allWeeks.length - 1];
-        }
+        let fallbackWeekDate: Date | null = potentialFallbackWeeks.length > 0 ? potentialFallbackWeeks[potentialFallbackWeeks.length - 1] : (allWeeks.length > 0 ? allWeeks[allWeeks.length - 1] : null);
 
         if (fallbackWeekDate && fallbackWeekDate.getTime() !== targetWeekDate.getTime()) {
             console.log(`[GradingPage Server] Falling back to week: ${fallbackWeekDate.toISOString()}`);
             finalTargetWeekDate = fallbackWeekDate;
             // Re-fetch planned items and assessments for the fallback week
-            finalPlannedItemsData = await getPlannedItemsForWeek(classId, finalTargetWeekDate);
-            // Fetch assessments only if there are planned items for the fallback week
-            if (finalPlannedItemsData.length > 0) {
-                const studentEnrollmentIds = studentsData.map(s => s.id);
-                finalAssessmentsData = await getExistingAssessments(studentEnrollmentIds, finalTargetWeekDate);
-            } else {
-                console.log(`[GradingPage Server] Fallback week ${fallbackWeekDate.toISOString()} also has no planned items.`);
-                finalAssessmentsData = []; // Ensure it's empty if fallback also has no items
-            }
-            console.log(`[GradingPage Server] Fetched ${finalPlannedItemsData.length} planned items for fallback week.`);
-        } else {
-            console.log(`[GradingPage Server] Fallback week is same as target or no fallback possible. Using original empty planned items.`);
-            // If fallback is the same or no fallback possible, assessments remain empty
-            finalAssessmentsData = []; 
+            plannedItemsData = await getPlannedItemsForWeek(classId, finalTargetWeekDate);
+            assessmentsData = plannedItemsData.length > 0 
+                ? await getExistingAssessments(studentsData.map(s => s.id), finalTargetWeekDate)
+                : [];
         }
-    } else {
-        // If initial fetch had items, fetch assessments for the initial target week
-        const studentEnrollmentIds = studentsData.map(s => s.id);
-        finalAssessmentsData = await getExistingAssessments(studentEnrollmentIds, finalTargetWeekDate);
-        console.log(`[GradingPage Server] Assessments data fetched after getExistingAssessments: ${finalAssessmentsData.length} items`);
-    }
+    } 
+    // If a week *was* requested, we stick with the initially fetched data (even if empty)
+    // --- End Modified Fallback Logic ---
 
-    // --- Log data before passing to client ---
-    console.log(`[GradingPage Server] Passing ${finalPlannedItemsData.length} planned items to client:`, 
-        JSON.stringify(finalPlannedItemsData.map(p => ({ id: p.id, name: p.contentGroup.name }))) // Log IDs and names
-    );
-    console.log(`[GradingPage Server] Passing ${finalAssessmentsData.length} assessments to client:`, 
-        JSON.stringify(finalAssessmentsData.map(a => ({ // Log key fields
-            id: a.id, 
-            enrollmentId: a.studentEnrollmentId, 
-            planId: a.classCurriculumPlanId, 
-            date: a.assessmentDate 
-        })))
-    );
-    // --- End Logging ---
+    // --- Logging --- 
+    console.log(`[GradingPage Server] Final Target Week: ${finalTargetWeekDate.toISOString()}`);
+    console.log(`[GradingPage Server] Passing ${plannedItemsData.length} planned items to client.`);
+    console.log(`[GradingPage Server] Passing ${assessmentsData.length} assessments to client.`);
 
     return (
         <div className="flex flex-col h-full">
             <GradingTableClient
-                key={`${finalTargetWeekDate.toISOString()}-${classId}`} // Key uses determined classId
+                key={`${finalTargetWeekDate.toISOString()}-${classId}`}
                 classData={classData}
                 students={studentsData}
                 gradeScales={gradeScalesData}
-                plannedItems={finalPlannedItemsData}
-                initialAssessments={finalAssessmentsData}
+                plannedItems={plannedItemsData}
+                initialAssessments={assessmentsData} // Use assessmentsData variable
                 terms={termsData}
                 currentWeek={finalTargetWeekDate}
                 allWeeks={allWeeks}
-                currentClassId={classId} // Pass determined classId
+                currentClassId={classId}
             />
         </div>
     );

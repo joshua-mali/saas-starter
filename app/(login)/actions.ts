@@ -16,7 +16,9 @@ import {
   type TeamMember
 } from '@/lib/db/schema';
 import { getMemberLimit } from '@/lib/plans';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
+import { AuthApiError, PostgrestError } from '@supabase/supabase-js';
 import { and, count, eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
@@ -106,9 +108,49 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   const { email, password, fullName, inviteToken, teamId, role } = data;
   console.log('signUp action called with:', { email, fullName, inviteToken, teamId, role });
 
+  // === Add User Existence Check using RPC ===
+  try {
+    const { data: existingUserData, error: rpcError } = await supabaseAdmin.rpc(
+      'get_user_id_by_email', 
+      { user_email: email } // Pass email to the function
+    );
+
+    // Handle potential RPC errors
+    if (rpcError) {
+        // Differentiate between expected "not found" (empty result) and actual errors
+        // A PostgrestError with code P0001 might indicate function not found, 
+        // or other codes for SQL errors. Empty data isn't an error itself here.
+        console.error('RPC get_user_id_by_email error:', rpcError);
+        throw rpcError; // Throw actual errors
+    }
+
+    // Check if the function returned any rows (meaning user exists)
+    // The function returns an array of objects like [{ id: 'uuid' }] or []
+    if (existingUserData && existingUserData.length > 0) {
+        console.log(`Sign up attempt for existing email: ${email}`);
+        return { error: 'An account with this email already exists. Please sign in.' };
+    }
+    
+    // If RPC succeeded and returned no data, the email is not in use. Proceed.
+
+  } catch (error) {
+    console.error('Error during RPC user existence check:', error);
+    let errorMessage = 'Could not verify email address. Please try again later.';
+     if (error instanceof PostgrestError) {
+        errorMessage = `Database Error (${error.code}): ${error.message}`;
+    } else if (error instanceof AuthApiError) {
+        errorMessage = `Auth Error: ${error.message}`;
+    } else if (error instanceof Error) {
+        errorMessage = error.message;
+    }
+    return { error: errorMessage };
+  }
+  // === End User Existence Check ===
+
+  // Proceed with signup if user does not exist
   const supabase = await createClient();
 
-  const { error, data: { user } } = await supabase.auth.signUp({
+  const { error: signUpError, data: { user } } = await supabase.auth.signUp({
     email,
     password,
     options: {
@@ -118,13 +160,16 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     },
   });
 
-  if (error) {
-    console.error('Supabase sign up error:', error.message);
-    return { error: `Could not authenticate user: ${error.message}` };
+  if (signUpError) {
+    console.error('Supabase sign up error:', signUpError.message);
+    return { error: `Could not authenticate user: ${signUpError.message}` };
   }
 
   if (!user) {
-    return { error: 'Sign up successful, but user data not returned.' };
+    // This case might indicate email confirmation is required, 
+    // or something else went wrong post-signup but pre-user-return.
+    // Consider if the message needs adjustment based on email confirmation settings.
+    return { error: 'Sign up process initiated. Please check your email to confirm your account.' }; 
   }
 
   console.log('Sign up successful for:', user.email, 'User ID:', user.id);
@@ -148,17 +193,15 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
         })
         .from(teams)
         .leftJoin(teamMembers, eq(teams.id, teamMembers.teamId))
-        .where(eq(teams.id, teamIdNum)) // Use parsed teamIdNum
+        .where(eq(teams.id, teamIdNum))
         .groupBy(teams.id);
 
         if (!teamData) {
-          // This shouldn't happen if the invitation was valid, but check anyway
           console.error(`Sign Up: Team not found (ID: ${teamIdNum}) during invite processing.`);
           return { error: 'Invited team not found.' };
         }
 
         const limit = getMemberLimit(teamData.planName);
-        // Check if adding ONE more member would exceed the limit
         if (teamData.memberCount >= limit) {
           console.warn(`Sign Up: Team ${teamIdNum} is full (Limit: ${limit}, Current: ${teamData.memberCount}). Cannot add user ${user.id}.`);
           return { error: `The team you were invited to has reached its member limit (${limit}) for the current plan.` };
@@ -178,48 +221,44 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
       console.log(`Successfully inserted user ${user.id} into team_members for team ${teamIdNum}`);
 
       // 2. Update the invitation status to 'accepted'
-      let updateResult: { id: number }[] = []; // Declare outside the block
-      // Ensure user and inviteToken are valid before proceeding
-      if (!user || !inviteToken) { // Add null check for user
-         console.error("Sign Up: User or inviteToken became null/undefined unexpectedly during invite processing.");
-         // Don't necessarily error out the whole sign-up, but log it.
-         // The user is already in the team at this point.
+      if (!inviteToken) { 
+         console.warn("Sign Up: inviteToken became null/undefined unexpectedly during invite update.");
       } else {
-          updateResult = await db.update(invitations)
+          const updateResult = await db.update(invitations)
              .set({ status: 'accepted' })
-             .where(eq(invitations.token, inviteToken as string)) // Assert inviteToken is string
-             .returning({ id: invitations.id }); // Add returning clause
+             .where(eq(invitations.token, inviteToken))
+             .returning({ id: invitations.id });
          
-         // Check if any rows were returned (indicating an update occurred)
          if (updateResult.length > 0) {
              console.log(`Successfully updated invitation status for token ${inviteToken}`);
          } else {
-             console.warn(`Could not find or update invitation status for token ${inviteToken}. It might have expired or already been used.`);
-             // Decide if this should be an error for the user - probably not, as they are now in the team.
+             console.warn(`Could not find or update invitation status for token ${inviteToken}.`);
          }
       }
 
-      // 3. Clean up invite cookie (if accept-invite route sets one - check that route)
-      // Commented out as it caused linter issues previously and might not be needed
-      // try {
-      //   cookies().delete('invite_context');
-      // } catch (e) { console.warn("Could not delete invite cookie (ignore if lint error)")}
-
-    } catch (dbError) {
-      console.error(`FATAL: Error processing invite during sign up for user ${user.id}, team ${teamId}. Error:`, dbError);
-      // Return an error to the client so they know invite processing failed.
-      // The user account exists, but they aren't in the team.
-      return { 
-        error: `Your account was created, but we failed to add you to the team due to an internal error (${dbError instanceof Error ? dbError.message : 'Unknown DB issue'}). Please contact support.` 
-      };
+    } catch (inviteError) {
+      console.error(`Error processing invite for user ${user.id}, team ${teamId}, token ${inviteToken}:`, inviteError);
+      // Decide how to handle invite processing errors. Should it fail the whole signup?
+      // Maybe just log it and let the user sign in, they are already created.
+      // Returning a generic error for now, but consider letting signup succeed with a warning.
+      return { error: 'Account created, but failed to process the team invitation. Please contact support.' };
     }
-  } else {
-    console.log(`SignUp for user ${user.id} - No invite parameters detected.`);
-    // TODO: Implement default team creation for non-invited users *here* 
-    //       instead of in the dashboard loader if that's desired.
-  }
+    
+    // If invite processed successfully, redirect to dashboard (or maybe profile completion?)
+    console.log('Invite processed successfully, redirecting...');
+    redirect('/dashboard'); 
 
-  return { success: true }; // Return success
+  } else {
+    // If NOT an invite flow, maybe redirect to profile completion or dashboard
+    // For now, just indicate success (no error returned implies success)
+    console.log('Sign up successful (no invite), redirecting...');
+    // Consider where non-invited new users should go. 
+    // Maybe redirect('/auth/complete-profile') or similar? Redirecting to dashboard for now.
+    redirect('/dashboard');
+  }
+  
+  // Default return (should usually be redirected)
+  return {}; 
 });
 
 export async function signOut() {

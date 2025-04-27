@@ -105,26 +105,33 @@ export default function GradingTableClient({
 
     // --- Week Navigation Logic (using pre-calculated allWeeks) ---
     const currentWeekIndex = useMemo(() => {
-        // Ensure currentWeek is treated as a Date object for comparison
         const currentWeekTime = new Date(currentWeek).getTime();
-        return allWeeks.findIndex(week => week.getTime() === currentWeekTime);
+        console.log(`[Grading Client] Current Week Time: ${currentWeekTime}, Date: ${new Date(currentWeek).toISOString()}`);
+        console.log('[Grading Client] All Weeks Times:', allWeeks.map(w => ({ time: w.getTime(), date: w.toISOString() })));
+        const index = allWeeks.findIndex(week => week.getTime() === currentWeekTime);
+        console.log(`[Grading Client] Calculated currentWeekIndex: ${index}`);
+        return index;
     }, [currentWeek, allWeeks]);
 
     const canGoPrev = currentWeekIndex > 0;
     const canGoNext = currentWeekIndex < allWeeks.length - 1;
+    console.log(`[Grading Client] Navigation State: canGoPrev=${canGoPrev}, canGoNext=${canGoNext}, index=${currentWeekIndex}, totalWeeks=${allWeeks.length}`);
 
     const navigateToWeek = (weekDate: Date) => {
         const formattedDate = formatDate(weekDate);
-        // Use currentClassId from props for navigation
-        router.push(`/dashboard/grading?classId=${currentClassId}&week=${formattedDate}`); // Update path to use query param
+        const targetUrl = `/dashboard/grading?classId=${currentClassId}&week=${formattedDate}`;
+        console.log(`[Grading Client] Navigating to URL: ${targetUrl}`);
+        router.push(targetUrl); 
     };
     const handlePreviousWeek = () => {
         if (canGoPrev) {
+            console.log(`[Grading Client] Handling Previous Week. Index: ${currentWeekIndex}, Target Index: ${currentWeekIndex - 1}`);
             navigateToWeek(allWeeks[currentWeekIndex - 1]);
         }
     };
     const handleNextWeek = () => {
         if (canGoNext) {
+            console.log(`[Grading Client] Handling Next Week. Index: ${currentWeekIndex}, Target Index: ${currentWeekIndex + 1}`);
             navigateToWeek(allWeeks[currentWeekIndex + 1]);
         }
     };
@@ -254,13 +261,14 @@ export default function GradingTableClient({
                         onValueChange={(value) => navigateToWeek(new Date(value))}
                         disabled={isPending}
                     >
-                        <SelectTrigger className="w-[180px]">
-                            <SelectValue placeholder="Select Week..." />
+                        <SelectTrigger className="w-[250px]">
+                            <SelectValue placeholder="Select week" />
                         </SelectTrigger>
                         <SelectContent>
                             {allWeeks.map((week, index) => (
                                 <SelectItem key={index} value={formatDate(week)}>
-                                    Week ({new Date(week).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })})
+                                    {/* TODO: Enhance display format later */}
+                                    {formatDate(week)} 
                                 </SelectItem>
                             ))}
                         </SelectContent>

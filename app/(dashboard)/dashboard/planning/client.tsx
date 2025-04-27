@@ -477,7 +477,7 @@ export default function PlanningBoardClient({
           </div>
         ) : (
           <div className="flex-1 flex items-center justify-center">
-            <p className="text-muted-foreground">Please define term dates or select a term to start planning.</p>
+            <p className="text-muted-foreground">Please define term dates in the settings page or select a term to start planning.</p>
           </div>
         )}
       </div>
