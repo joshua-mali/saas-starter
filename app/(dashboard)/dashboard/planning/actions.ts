@@ -71,7 +71,7 @@ export async function addPlanItem(
                             })
                             .returning();
 
-    revalidatePath(`/dashboard/planning/${classId}`)
+    revalidatePath('/dashboard/planning')
     return { success: true, error: null, newItem: newItem }
 
   } catch (error) {
@@ -115,7 +115,7 @@ export async function updatePlanItem(
             })
             .where(eq(classCurriculumPlan.id, planItemId));
 
-    revalidatePath(`/dashboard/planning/${originalItem.classId}`)
+    revalidatePath('/dashboard/planning')
     return { success: true, error: null }
 
   } catch (error) {
@@ -152,7 +152,7 @@ export async function deletePlanItem(
     try {
         await db.delete(classCurriculumPlan).where(eq(classCurriculumPlan.id, planItemId));
 
-        revalidatePath(`/dashboard/planning/${originalItem.classId}`);
+        revalidatePath('/dashboard/planning')
         return { success: true, error: null };
 
     } catch (error) {

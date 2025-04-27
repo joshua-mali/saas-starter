@@ -36,9 +36,11 @@ import { saveAssessment } from "./actions"; // Import the server action
 
 type StudentWithEnrollment = StudentEnrollment & { student: Student };
 type PlannedItemWithContentGroup = ClassCurriculumPlanItem & { contentGroup: { name: string } };
+// Remove SimpleClass type if no longer needed here
+// type SimpleClass = { id: number; name: string };
 
 interface GradingTableClientProps {
-    classData: Class & { stage: Stage | null };
+    classData: Class & { stage: Stage | null }; // classData still needed for display
     students: StudentWithEnrollment[];
     gradeScales: GradeScale[];
     plannedItems: PlannedItemWithContentGroup[];
@@ -46,6 +48,11 @@ interface GradingTableClientProps {
     terms: Term[];
     currentWeek: Date; // Pass the specific week being viewed
     allWeeks: Date[]; // Use pre-calculated weeks from server
+    // Remove props related to the class selector previously here
+    // currentClassId: number;
+    // userTaughtClasses: SimpleClass[];
+    // allTeamClasses: SimpleClass[];
+    currentClassId: number; // Keep currentClassId to know which class we are viewing
 }
 
 // Helper function to format dates consistently
@@ -62,12 +69,16 @@ export default function GradingTableClient({
     initialAssessments,
     terms,
     currentWeek,
-    allWeeks, // Use pre-calculated weeks from server
+    allWeeks,
+    // Remove destructured props
+    currentClassId, // Keep this one
+    // userTaughtClasses, 
+    // allTeamClasses,
 }: GradingTableClientProps) {
 
     // --- Log props received by client ---
     console.log('[GradingTable Client] Received Props:', {
-        classId: classData.id,
+        classId: currentClassId, // Use currentClassId prop
         currentWeek: formatDate(currentWeek),
         plannedItemsCount: plannedItems.length,
         plannedItemsSample: plannedItems.slice(0, 5).map(p => ({ id: p.id, name: p.contentGroup.name })), // Log first 5 planned item IDs/names
@@ -85,6 +96,12 @@ export default function GradingTableClient({
     const [assessments, setAssessments] = useState<StudentAssessment[]>(initialAssessments);
     const [isPending, startTransition] = useTransition();
     const router = useRouter();
+    // Remove client-side class selection logic
+    // const pathname = usePathname();
+    // const searchParams = useSearchParams();
+    // const [selectedValue, setSelectedValue] = useState(...);
+    // useEffect(...);
+    // const handleClassChange = (...);
 
     // --- Week Navigation Logic (using pre-calculated allWeeks) ---
     const currentWeekIndex = useMemo(() => {
@@ -98,7 +115,8 @@ export default function GradingTableClient({
 
     const navigateToWeek = (weekDate: Date) => {
         const formattedDate = formatDate(weekDate);
-        router.push(`/dashboard/grading/${classData.id}?week=${formattedDate}`);
+        // Use currentClassId from props for navigation
+        router.push(`/dashboard/grading?classId=${currentClassId}&week=${formattedDate}`); // Update path to use query param
     };
     const handlePreviousWeek = () => {
         if (canGoPrev) {
@@ -170,7 +188,7 @@ export default function GradingTableClient({
         // Call Server Action
         startTransition(() => {
             saveAssessment({
-                classId: classData.id,
+                classId: currentClassId, // Use currentClassId prop here
                 studentEnrollmentId,
                 classCurriculumPlanId,
                 contentGroupId,
@@ -212,11 +230,13 @@ export default function GradingTableClient({
 
     return (
         <div className="flex flex-col h-full">
-            {/* Header Section with Week Navigation */}
-            <div className="flex justify-between items-center p-4 border-b flex-shrink-0">
-                <h1 className="text-xl font-semibold">
-                    Grading: {classData.name} - Week of {new Date(currentWeek).toLocaleDateString('en-AU')}
+            {/* Header Section - Remove Class Selector, keep Week Navigation */}
+            <div className="flex justify-between items-center p-4 border-b flex-shrink-0 flex-wrap gap-4">
+                 {/* Display current class name and week */}
+                 <h1 className="text-xl font-semibold flex-shrink-0">
+                     Grading: {classData.name} - Week of {new Date(currentWeek).toLocaleDateString('en-AU')}
                 </h1>
+                
                 {/* Week Navigation Controls */}
                 <div className="flex items-center space-x-2">
                     <Button

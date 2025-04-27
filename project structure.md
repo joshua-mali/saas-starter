@@ -4,24 +4,22 @@
         └── 📁dashboard
             └── 📁activity
                 └── page.tsx
+            └── class-selector-client.tsx
+            └── class-selector.tsx
             └── 📁classes
                 └── actions.ts
                 └── client.tsx
                 └── page.tsx
             └── 📁grading
-                └── 📁[classId]
-                    └── actions.ts
-                    └── client.tsx
-                    └── page.tsx
+                └── actions.ts
+                └── client.tsx
                 └── page.tsx
             └── invite-team.tsx
             └── layout.tsx
             └── page.tsx
             └── 📁planning
-                └── 📁[classId]
-                    └── actions.ts
-                    └── client.tsx
-                    └── page.tsx
+                └── actions.ts
+                └── client.tsx
                 └── page.tsx
             └── 📁report
                 └── 📁[classId]
@@ -53,6 +51,8 @@
             └── page.tsx
         └── 📁sign-up
             └── page.tsx
+    └── 📁actions
+        └── get-classes.ts
     └── 📁api
         └── 📁stripe
             └── 📁checkout
@@ -67,7 +67,6 @@
             └── page.tsx
         └── 📁confirm
             └── route.ts
-    └── 📁pricing
     └── favicon.ico
     └── globals.css
     └── layout.tsx

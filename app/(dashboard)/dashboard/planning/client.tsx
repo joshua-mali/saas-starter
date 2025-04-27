@@ -3,17 +3,17 @@
 import { Input } from '@/components/ui/input'
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select'
 import {
-    type Class,
-    type ClassCurriculumPlanItem,
-    type Stage,
-    type Term
+  type Class,
+  type ClassCurriculumPlanItem,
+  type Stage,
+  type Term
 } from '@/lib/db/schema'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -21,16 +21,16 @@ import { toast } from 'sonner'
 // DND Imports
 import { cn } from '@/lib/utils'
 import {
-    DndContext,
-    DragOverlay,
-    PointerSensor,
-    useDraggable,
-    useDroppable,
-    useSensor,
-    useSensors,
-    type Active,
-    type DragEndEvent,
-    type DragStartEvent,
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type Active,
+  type DragEndEvent,
+  type DragStartEvent,
 } from '@dnd-kit/core'
 
 // Import server actions
@@ -56,6 +56,7 @@ interface PlanningBoardClientProps {
   terms: Term[];
   availableContentGroups: ContentGroupWithContext[];
   initialPlanItems: ClassCurriculumPlanItem[];
+  currentClassId: number;
 }
 
 // Helper to get weeks between two dates
@@ -195,6 +196,7 @@ export default function PlanningBoardClient({
   terms,
   availableContentGroups,
   initialPlanItems,
+  currentClassId,
 }: PlanningBoardClientProps) {
   const [selectedTermNumber, setSelectedTermNumber] = useState<number | null>(terms[0]?.termNumber ?? null);
   const [planItems, setPlanItems] = useState<ClassCurriculumPlanItem[]>(initialPlanItems);
@@ -311,7 +313,7 @@ export default function PlanningBoardClient({
         
         setPlanItems(prev => [...prev, newItem]);
 
-        addPlanItem({ classId: classData.id, contentGroupId, weekStartDate })
+        addPlanItem({ classId: currentClassId, contentGroupId, weekStartDate })
           .then((result: ActionResult) => {
             if (result.error) {
               toast.error(`Failed to add plan item: ${result.error}`);
