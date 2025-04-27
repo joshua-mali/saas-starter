@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/client'; // Client-side Supabase
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-// import { completeUserProfile } from './actions'; // TEMPORARILY COMMENTED OUT
+import { completeUserProfile } from './actions'; // We'll create this server action next
 
 // Basic UI components (assuming similar styling to login/signup)
 import { Button } from "@/components/ui/button";
@@ -40,8 +40,6 @@ export default function CompleteProfilePage() {
     setIsLoading(true)
     setError(null)
 
-    // --- TEMPORARILY COMMENTED OUT SERVER ACTION CALL ---
-    /*
     if (!fullName.trim()) {
         setError('Please enter your full name.')
         setIsLoading(false)
@@ -65,17 +63,6 @@ export default function CompleteProfilePage() {
     } finally {
       setIsLoading(false)
     }
-    */
-    // --- END TEMPORARY COMMENT OUT ---
-
-    // Add a dummy delay and success for testing deployment
-    console.log("Form submitted (Server Action call commented out)");
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate async work
-    setIsLoading(false);
-    // router.push('/'); // Keep redirection commented for now if needed
-    setError("Server action call is commented out for testing."); // Show message
-
-
   }
 
   if (!userEmail) {
