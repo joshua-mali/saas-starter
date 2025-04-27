@@ -37,8 +37,24 @@ export default async function DashboardPage() {
   if (!membership?.teamId) {
     console.log(`No team membership found for user ${user.id}. Attempting to create default team...`);
     try {
+       // IMPORTANT: Fetch user's profile needed for default team name
+      const [userProfile] = await db.select().from(profiles).where(eq(profiles.id, user.id)).limit(1);
+      if (!userProfile) {
+          // This case should ideally not happen if the trigger works, but handle defensively
+          console.warn(`Profile not found for user ${user.id} when creating default team. Using email for name.`);
+          // Optionally throw an error or proceed with a placeholder name
+      }
+
       const newTeamData: NewTeam = {
-        name: `${user.email}'s Team`, // Default team name
+        name: `${userProfile?.full_name || user.email}'s Team`,
+        // --- Set Free Tier Defaults (camelCase) ---
+        planName: 'Free',
+        subscriptionStatus: 'free',
+        teacherLimit: 1, // Set free tier limit
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
+        stripeProductId: null,
+        // --- End Free Tier Defaults ---
       };
       const [createdTeam] = await db.insert(teams).values(newTeamData).returning({ id: teams.id });
 
@@ -48,12 +64,7 @@ export default async function DashboardPage() {
 
       teamIdToLoad = createdTeam.id;
 
-      // IMPORTANT: Fetch user's profile after potential creation by trigger
-      const [userProfile] = await db.select().from(profiles).where(eq(profiles.id, user.id)).limit(1);
-      if (!userProfile) {
-          console.warn(`Profile not found for user ${user.id} immediately after sign-up/team creation. This might indicate a delay or issue with the handle_new_user trigger.`);
-          // Handle appropriately - perhaps retry or show a placeholder? For now, log warning.
-      }
+      // No need to fetch profile again here
 
       const newMemberData: NewTeamMember = {
         userId: user.id,
@@ -62,9 +73,9 @@ export default async function DashboardPage() {
       };
       await db.insert(teamMembers).values(newMemberData);
 
-      console.log(`Default team ${teamIdToLoad} created for user ${user.id}.`);
+      console.log(`Default team ${teamIdToLoad} (Free Plan) created for user ${user.id}.`);
 
-      // TODO: Log activity
+      // TODO: Log activity (Team Created - Free Plan)
 
     } catch (creationError) {
       console.error(`Failed to create default team/membership for user ${user.id}:`, creationError);

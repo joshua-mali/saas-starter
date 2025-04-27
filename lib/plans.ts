@@ -1,10 +1,13 @@
 export const PLAN_MEMBER_LIMITS: Record<string, number> = {
-  'Free Plan': 3,
-  'Pro Plan': 10,
+  'Free': 1,
+  'Small': 10,
+  'Medium': 15,
+  'Unlimited': 50,
   // Add other plan names and their limits here
 };
 
 export function getMemberLimit(planName: string | null | undefined): number {
-  if (!planName) return PLAN_MEMBER_LIMITS['Free Plan'] ?? 1; // Default to free/lowest if no plan name
-  return PLAN_MEMBER_LIMITS[planName] ?? Infinity; // Default to Infinity if plan name not found (or handle error)
+  const defaultLimit = PLAN_MEMBER_LIMITS['Free'] ?? 1; // Use Free tier limit as default
+  if (!planName) return defaultLimit;
+  return PLAN_MEMBER_LIMITS[planName] ?? defaultLimit; // Return default if plan name not found
 } 

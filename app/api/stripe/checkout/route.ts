@@ -1,9 +1,9 @@
-import { eq } from 'drizzle-orm';
-import { db } from '@/lib/db/drizzle';
-import { users, teams, teamMembers } from '@/lib/db/schema';
 import { setSession } from '@/lib/auth/session';
-import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/db/drizzle';
+import { authUsers, teamMembers, teams } from '@/lib/db/schema';
 import { stripe } from '@/lib/payments/stripe';
+import { eq } from 'drizzle-orm';
+import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 
 export async function GET(request: NextRequest) {
@@ -56,12 +56,12 @@ export async function GET(request: NextRequest) {
 
     const user = await db
       .select()
-      .from(users)
-      .where(eq(users.id, Number(userId)))
+      .from(authUsers)
+      .where(eq(authUsers.id, userId))
       .limit(1);
 
-    if (user.length === 0) {
-      throw new Error('User not found in database.');
+    if (!user || user.length === 0) {
+      throw new Error(`User not found for ID: ${userId}`);
     }
 
     const userTeam = await db

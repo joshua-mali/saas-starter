@@ -23,17 +23,23 @@
                     └── client.tsx
                     └── page.tsx
                 └── page.tsx
-            └── 📁security
-                └── page.tsx
+            └── 📁report
+                └── 📁[classId]
+                    └── client.tsx
+                    └── page.tsx
+            └── 📁settings
             └── settings.tsx
+                └── actions.ts
+                └── page.tsx
             └── 📁students
+                └── 📁[classId]
+                    └── 📁[studentId]
+                        └── client.tsx
+                        └── page.tsx
                 └── actions.ts
                 └── client.tsx
                 └── page.tsx
-            └── 📁terms
-                └── actions.ts
-                └── client.tsx
-                └── page.tsx
+            └── team-settings.tsx
         └── layout.tsx
         └── page.tsx
         └── 📁pricing
@@ -61,10 +67,12 @@
             └── page.tsx
         └── 📁confirm
             └── route.ts
+    └── 📁pricing
     └── favicon.ico
     └── globals.css
     └── layout.tsx
     └── not-found.tsx
+```
 ```
 └── 📁lib
     └── 📁auth

@@ -36,6 +36,7 @@ export const teams = pgTable('teams', {
   stripeProductId: text('stripe_product_id'),
   planName: varchar('plan_name', { length: 50 }),
   subscriptionStatus: varchar('subscription_status', { length: 20 }),
+  teacherLimit: integer('teacher_limit').notNull().default(3),
 });
 
 export const teamMembers = pgTable('team_members', {

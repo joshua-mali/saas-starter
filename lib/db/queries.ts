@@ -17,14 +17,21 @@ export async function updateTeamSubscription(
   subscriptionData: {
     stripeSubscriptionId: string | null;
     stripeProductId: string | null;
+    stripeCustomerId?: string | null;
     planName: string | null;
     subscriptionStatus: string;
+    teacherLimit: number;
   }
 ) {
   await db
     .update(teams)
     .set({
-      ...subscriptionData,
+      stripeSubscriptionId: subscriptionData.stripeSubscriptionId,
+      stripeProductId: subscriptionData.stripeProductId,
+      planName: subscriptionData.planName,
+      subscriptionStatus: subscriptionData.subscriptionStatus,
+      teacherLimit: subscriptionData.teacherLimit,
+      ...(subscriptionData.stripeCustomerId !== undefined && { stripeCustomerId: subscriptionData.stripeCustomerId }),
       updatedAt: new Date(),
     })
     .where(eq(teams.id, teamId));
