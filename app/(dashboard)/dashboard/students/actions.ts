@@ -2,10 +2,10 @@
 
 import { db } from '@/lib/db/drizzle'
 import {
-    studentEnrollments,
-    students,
-    teamMembers,
-    type Student, // Import the specific type if needed
+  studentEnrollments,
+  students,
+  teamMembers,
+  type Student, // Import the specific type if needed
 } from '@/lib/db/schema'
 import { createClient } from '@/lib/supabase/server'
 import { eq } from 'drizzle-orm'
@@ -141,4 +141,106 @@ export async function addStudentToClass(
     // Could check for specific DB errors like unique constraints if needed
     return { error: 'An unexpected error occurred while adding the student.' }
   }
+}
+
+// --- New Action: Add Students in Batch from CSV data ---
+
+// Schema for a single student in the batch
+const studentBatchInputSchema = z.object({
+  firstName: z.string().min(1, 'First name cannot be empty'),
+  lastName: z.string().min(1, 'Last name cannot be empty'),
+  // Add other optional fields if needed from CSV in the future
+});
+
+// Schema for the entire batch
+const addStudentsBatchSchema = z.array(studentBatchInputSchema);
+
+interface BatchActionResult {
+    error?: string | null;
+    success?: boolean;
+    addedCount?: number;
+    errorDetails?: { index: number; error: string }[];
+}
+
+export async function addStudentsBatch(
+    studentsData: { firstName: string; lastName: string }[],
+    classId: number // Add classId parameter
+): Promise<BatchActionResult> {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+        return { error: 'User not authenticated' };
+    }
+
+    if (!classId || typeof classId !== 'number') {
+        return { error: 'Invalid Class ID provided for enrollment.' };
+    }
+
+    // Get the user's team
+    const [userTeam] = await db.select({ teamId: teamMembers.teamId })
+                           .from(teamMembers)
+                           .where(eq(teamMembers.userId, user.id))
+                           .limit(1);
+
+    if (!userTeam || typeof userTeam.teamId !== 'number') {
+        return { error: 'User is not associated with a team.' };
+    }
+    const teamId = userTeam.teamId;
+
+    // Validate the incoming data array
+    const validatedData = addStudentsBatchSchema.safeParse(studentsData);
+
+    if (!validatedData.success) {
+        console.error('Batch validation failed:', validatedData.error.flatten());
+        return { error: 'Invalid student data provided in the batch.' };
+    }
+
+    // Prepare data for student insertion (add teamId)
+    const studentsToInsert = validatedData.data.map(student => ({
+        ...student,
+        teamId: teamId,
+    }));
+
+    if (studentsToInsert.length === 0) {
+        return { error: 'No valid students to add.' };
+    }
+
+    try {
+        // 1. Perform bulk student insert
+        const insertedStudents = await db.insert(students)
+                                      .values(studentsToInsert)
+                                      .returning({ id: students.id });
+
+        const addedCount = insertedStudents.length;
+        if (addedCount === 0) {
+             return { error: 'Failed to insert any student records.' };
+        }
+        console.log(`Successfully inserted ${addedCount} students for team ${teamId}`);
+
+        // 2. Prepare data for enrollment insertion
+        const enrollmentsToInsert = insertedStudents.map(student => ({
+            studentId: student.id,
+            classId: classId,
+            // Defaults for status and enrollmentDate are handled by the DB schema
+        }));
+
+        // 3. Perform bulk enrollment insert
+        await db.insert(studentEnrollments).values(enrollmentsToInsert);
+        console.log(`Successfully enrolled ${addedCount} students into class ${classId}`);
+
+        // Revalidate relevant paths
+        revalidatePath('/dashboard/students'); // Revalidates the page data source
+        // Optionally, revalidate the specific class grading page if needed immediately
+        revalidatePath(`/dashboard/grading/${classId}`);
+
+        return { success: true, addedCount: addedCount };
+
+    } catch (error: any) {
+        console.error('Error during batch student insert/enroll:', error);
+        if (error.code === '23505') { // Handle potential unique violations (e.g., student already enrolled)
+             return { error: 'Database error: Could not enroll students. Some might already exist or be enrolled.' };
+        }
+        return { error: 'An unexpected error occurred during the import.' };
+    }
 } 

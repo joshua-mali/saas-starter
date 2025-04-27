@@ -28,11 +28,12 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { type Class, type Student } from '@/lib/db/schema'; // Import types
+import { Loader2 } from 'lucide-react'; // For loading indicators
 import { useRouter } from 'next/navigation'
-import { useActionState, useEffect, useRef, useState } from 'react'
+import { useActionState, useEffect, useRef, useState, useTransition } from 'react'
 import { useFormStatus } from 'react-dom'
 import { toast } from 'sonner'
-import { addStudentToClass, getStudentsForClass } from './actions'
+import { addStudentsBatch, addStudentToClass, getStudentsForClass } from './actions'
 
 // Props passed from the server component
 interface StudentsPageClientProps {
@@ -44,6 +45,9 @@ type StudentData = {
   student: Student
   enrollmentStatus: string | null
 }
+
+// Type for parsed CSV row
+type CsvRow = Record<string, string>;
 
 function AddStudentSubmitButton() {
   const { pending } = useFormStatus()
@@ -66,6 +70,17 @@ export default function StudentsPageClient({ teacherClasses }: StudentsPageClien
     { error: null, success: false }
   )
   const addStudentFormRef = useRef<HTMLFormElement>(null)
+
+  // --- CSV Import State ---
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvData, setCsvData] = useState<CsvRow[]>([]);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [firstNameHeader, setFirstNameHeader] = useState<string | null>(null);
+  const [lastNameHeader, setLastNameHeader] = useState<string | null>(null);
+  const [isProcessingCsv, setIsProcessingCsv] = useState(false);
+  const [showMapping, setShowMapping] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isCsvPending, startCsvTransition] = useTransition(); // Transition for server action
 
   // Fetch students when class selection changes
   useEffect(() => {
@@ -133,6 +148,121 @@ export default function StudentsPageClient({ teacherClasses }: StudentsPageClien
     }
   };
 
+  // --- CSV Handling Functions ---
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setCsvFile(event.target.files ? event.target.files[0] : null);
+    setShowMapping(false); // Reset mapping view if file changes
+    setCsvData([]);
+    setCsvHeaders([]);
+    setFirstNameHeader(null);
+    setLastNameHeader(null);
+  };
+
+  const processCsv = () => {
+    if (!csvFile) return;
+    setIsProcessingCsv(true);
+    setShowMapping(false);
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+        const lines = text.trim().split(/\r\n|\n/);
+
+        if (lines.length < 2) {
+            toast.error("CSV must contain a header row and at least one data row.");
+            throw new Error("CSV too short");
+        }
+
+        // Basic CSV header parsing (assumes comma-separated, handles simple quotes)
+        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+        const data = lines.slice(1).map(line => {
+            // Basic row parsing (adjust regex if more complex CSVs are needed)
+            const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+            const row: CsvRow = {};
+            headers.forEach((header, index) => {
+                row[header] = values[index] || ''; // Assign value or empty string
+            });
+            return row;
+        });
+
+        setCsvHeaders(headers);
+        setCsvData(data);
+        setShowMapping(true);
+        // Attempt auto-mapping common names
+        const fnHeader = headers.find(h => /first.*name/i.test(h)) || null;
+        const lnHeader = headers.find(h => /last.*name|surname/i.test(h)) || null;
+        setFirstNameHeader(fnHeader);
+        setLastNameHeader(lnHeader);
+
+      } catch (error) {
+        console.error("Error parsing CSV:", error);
+        toast.error("Failed to parse CSV file. Please check the format.");
+        setCsvHeaders([]);
+        setCsvData([]);
+      } finally {
+        setIsProcessingCsv(false);
+      }
+    };
+
+    reader.onerror = () => {
+        toast.error("Failed to read file.");
+        setIsProcessingCsv(false);
+    };
+
+    reader.readAsText(csvFile);
+  };
+
+  const handleCsvUpload = () => {
+    if (!firstNameHeader || !lastNameHeader || csvData.length === 0) {
+      toast.warning("Please select headers for First Name and Last Name and ensure data exists.");
+      return;
+    }
+
+    startCsvTransition(async () => {
+        setIsUploading(true); // Use state for visual feedback if needed beyond transition
+
+        if (!selectedClassId) {
+             toast.error("Cannot upload CSV: No class selected.");
+             setIsUploading(false);
+             return;
+        }
+
+        const studentsToUpload = csvData.map(row => ({
+            firstName: row[firstNameHeader] || '',
+            lastName: row[lastNameHeader] || '',
+        })).filter(s => s.firstName && s.lastName); // Filter out rows with missing names
+
+        if (studentsToUpload.length === 0) {
+             toast.warning("No students with both first and last names found after mapping.");
+             setIsUploading(false);
+             return;
+        }
+
+        // Pass selectedClassId to the action
+        const result = await addStudentsBatch(studentsToUpload, selectedClassId);
+
+        if (result.error) {
+            toast.error(`CSV Upload Failed: ${result.error}`);
+        } else if (result.success) {
+            toast.success(`Successfully added ${result.addedCount} students!`);
+            // Reset CSV state
+            setCsvFile(null);
+            setCsvData([]);
+            setCsvHeaders([]);
+            setShowMapping(false);
+            setFirstNameHeader(null);
+            setLastNameHeader(null);
+            // Refetch students for the current class
+             if (selectedClassId) {
+                // No need to set isLoadingStudents, rely on list update via revalidation
+                console.log('CSV upload success, student list should revalidate.')
+             }
+        }
+        setIsUploading(false);
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Class Selection */}
@@ -195,6 +325,91 @@ export default function StudentsPageClient({ teacherClasses }: StudentsPageClien
                 <AddStudentSubmitButton />
               </CardFooter>
             </form>
+          </Card>
+
+          {/* --- CSV Import Card --- */}
+          <Card>
+            <CardHeader>
+                <CardTitle>Import Students from CSV</CardTitle>
+                <CardDescription>Upload a CSV file with student names.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                 <div className="flex items-center gap-4">
+                     <Label htmlFor="csv-file-input" className="sr-only">Choose CSV File</Label>
+                     <Input
+                        id="csv-file-input"
+                        type="file"
+                        accept=".csv"
+                        onChange={handleFileChange}
+                        disabled={isProcessingCsv || isCsvPending}
+                        className="flex-grow"
+                    />
+                    <Button
+                        onClick={processCsv}
+                        disabled={!csvFile || isProcessingCsv || isCsvPending}
+                    >
+                        {isProcessingCsv ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        {isProcessingCsv ? 'Processing...' : 'Process CSV'}
+                    </Button>
+                 </div>
+
+                 {showMapping && (
+                    <div className="border p-4 rounded-md space-y-4">
+                        <h4 className="font-medium">Map CSV Columns</h4>
+                        <p className="text-sm text-muted-foreground">
+                            Select which columns contain the First Name and Last Name. Found {csvData.length} data rows.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>First Name Column</Label>
+                                <Select
+                                    value={firstNameHeader || ''}
+                                    onValueChange={setFirstNameHeader}
+                                    disabled={isCsvPending}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select header..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {csvHeaders.map((header, index) => (
+                                            <SelectItem key={`fn-${index}`} value={header}>
+                                                {header}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Last Name Column</Label>
+                                 <Select
+                                    value={lastNameHeader || ''}
+                                    onValueChange={setLastNameHeader}
+                                     disabled={isCsvPending}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select header..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {csvHeaders.map((header, index) => (
+                                            <SelectItem key={`ln-${index}`} value={header}>
+                                                {header}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                         <Button
+                            onClick={handleCsvUpload}
+                            disabled={!firstNameHeader || !lastNameHeader || isCsvPending || isUploading}
+                            className="mt-4"
+                         >
+                             {isCsvPending || isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Confirm Mapping & Upload Students
+                         </Button>
+                    </div>
+                 )}
+            </CardContent>
           </Card>
 
           {/* Student List Table */}
