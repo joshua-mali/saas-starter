@@ -55,10 +55,19 @@ interface GradingTableClientProps {
     currentClassId: number; // Keep currentClassId to know which class we are viewing
 }
 
-// Helper function to format dates consistently
-const formatDate = (date: Date | string) => {
-    const d = new Date(date);
-    return d.toISOString().split('T')[0]; // YYYY-MM-DD format
+// Helper function to format dates consistently to YYYY-MM-DD
+const formatDate = (date: Date | string): string => {
+    try {
+        const d = new Date(date);
+        // Ensure we handle potential timezone offsets correctly when getting YYYY-MM-DD
+        const year = d.getFullYear(); // Use local year
+        const month = (d.getMonth() + 1).toString().padStart(2, '0'); // Use local month
+        const day = d.getDate().toString().padStart(2, '0'); // Use local day
+        return `${year}-${month}-${day}`;
+    } catch (e) {
+        console.error("Error formatting date:", date, e);
+        return ''; // Return empty string or handle error appropriately
+    }
 };
 
 export default function GradingTableClient({
@@ -105,11 +114,20 @@ export default function GradingTableClient({
 
     // --- Week Navigation Logic (using pre-calculated allWeeks) ---
     const currentWeekIndex = useMemo(() => {
-        const currentWeekTime = new Date(currentWeek).getTime();
-        console.log(`[Grading Client] Current Week Time: ${currentWeekTime}, Date: ${new Date(currentWeek).toISOString()}`);
-        console.log('[Grading Client] All Weeks Times:', allWeeks.map(w => ({ time: w.getTime(), date: w.toISOString() })));
-        const index = allWeeks.findIndex(week => week.getTime() === currentWeekTime);
-        console.log(`[Grading Client] Calculated currentWeekIndex: ${index}`);
+        const currentWeekString = formatDate(currentWeek);
+        console.log(`[Grading Client] Current Week String: ${currentWeekString}`);
+        console.log('[Grading Client] All Weeks Strings:', allWeeks.map(w => formatDate(w)));
+        // Find index by comparing YYYY-MM-DD strings
+        const index = allWeeks.findIndex(week => formatDate(week) === currentWeekString);
+        console.log(`[Grading Client] Calculated currentWeekIndex (Date String Match): ${index}`);
+        // Fallback check if string match fails (shouldn't be needed now, but keep for safety)
+        if (index === -1) {
+             console.warn('[Grading Client] Date string match failed, attempting timestamp match as fallback...');
+             const currentWeekTime = new Date(currentWeek).setHours(0,0,0,0); // Normalize time for comparison
+             const fallbackIndex = allWeeks.findIndex(week => new Date(week).setHours(0,0,0,0) === currentWeekTime);
+             console.log(`[Grading Client] Fallback timestamp match index: ${fallbackIndex}`);
+             return fallbackIndex; // Use fallback index if primary failed
+        }
         return index;
     }, [currentWeek, allWeeks]);
 
@@ -135,6 +153,9 @@ export default function GradingTableClient({
             navigateToWeek(allWeeks[currentWeekIndex + 1]);
         }
     };
+
+    const currentWeekFormatted = formatDate(currentWeek);
+    console.log(`[Grading Client] Initial formatted week for Select value: ${currentWeekFormatted}`);
 
     // --- Grade Change Handler ---
     const handleGradeChange = (
@@ -257,20 +278,22 @@ export default function GradingTableClient({
                     </Button>
                     {/* Week Selector Dropdown */}
                     <Select
-                        value={formatDate(currentWeek)}
+                        value={currentWeekFormatted}
                         onValueChange={(value) => navigateToWeek(new Date(value))}
                         disabled={isPending}
                     >
                         <SelectTrigger className="w-[250px]">
-                            <SelectValue placeholder="Select week" />
+                            <SelectValue placeholder="Select week..." />
                         </SelectTrigger>
                         <SelectContent>
-                            {allWeeks.map((week, index) => (
-                                <SelectItem key={index} value={formatDate(week)}>
-                                    {/* TODO: Enhance display format later */}
-                                    {formatDate(week)} 
-                                </SelectItem>
-                            ))}
+                            {allWeeks.map((week, index) => {
+                                const formattedWeekValue = formatDate(week);
+                                return (
+                                    <SelectItem key={index} value={formattedWeekValue}>
+                                        {formattedWeekValue} 
+                                    </SelectItem>
+                                );
+                            })}
                         </SelectContent>
                     </Select>
                     <Button

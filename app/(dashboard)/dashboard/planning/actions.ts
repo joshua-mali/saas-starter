@@ -20,13 +20,13 @@ async function canUserModifyClassPlan(userId: string, classId: number): Promise<
 const addPlanItemSchema = z.object({
   classId: z.coerce.number().int().positive(),
   contentGroupId: z.coerce.number().int().positive(),
-  weekStartDate: z.coerce.date(),
+  weekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Week start date must be in YYYY-MM-DD format" }),
   durationWeeks: z.coerce.number().int().min(1).optional().default(1),
 })
 
 const updatePlanItemSchema = z.object({
   planItemId: z.coerce.number().int().positive(),
-  weekStartDate: z.coerce.date(),
+  weekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Week start date must be in YYYY-MM-DD format" }),
   durationWeeks: z.coerce.number().int().min(1).optional(), // Optional for update
 })
 
@@ -62,11 +62,14 @@ export async function addPlanItem(
   if (!authorized) return { error: 'User not authorized to modify this class plan.' };
 
   try {
+    // Convert the YYYY-MM-DD string to a Date object, treating it as UTC
+    const dateObject = new Date(weekStartDate + 'T00:00:00Z');
+
     const [newItem] = await db.insert(classCurriculumPlan)
                             .values({
                               classId,
                               contentGroupId,
-                              weekStartDate,
+                              weekStartDate: dateObject, // Use the new Date object
                               durationWeeks,
                             })
                             .returning();
@@ -106,9 +109,12 @@ export async function updatePlanItem(
   if (!authorized) return { error: 'User not authorized to modify this item.' };
 
   try {
+    // Convert the YYYY-MM-DD string to a Date object, treating it as UTC
+    const dateObject = new Date(weekStartDate + 'T00:00:00Z');
+
     await db.update(classCurriculumPlan)
             .set({
-              weekStartDate,
+              weekStartDate: dateObject, // Use the new Date object
               // Only update duration if provided
               ...(durationWeeks !== undefined && { durationWeeks }),
               updatedAt: new Date(),

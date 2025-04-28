@@ -141,7 +141,7 @@ Enter the details for your new class.
                           Plan
                       </Button>
                     </Link>
-                    <Link href={`/dashboard/report/${cls.id}`} passHref>
+                    <Link href={`/dashboard/report?classId=${cls.id}`} passHref>
                       <Button variant="outline" size="sm">
                           <ClipboardList className="mr-1 h-4 w-4" />
                           Report

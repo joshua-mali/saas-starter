@@ -107,22 +107,25 @@ async function getGradeScales(teamId: number): Promise<GradeScale[]> {
     return db.select().from(gradeScales).orderBy(gradeScales.numericValue);
 }
 
-// Revert getPlannedItemsForWeek to accept a Date object
+// Reverted: Query directly using the provided (Monday) week start date
 type PlannedItemWithContentGroup = ClassCurriculumPlanItem & { contentGroup: { name: string } };
-async function getPlannedItemsForWeek(classId: number, weekStartDate: Date): Promise<PlannedItemWithContentGroup[]> {
+async function getPlannedItemsForWeek(classId: number, mondayWeekStartDate: Date): Promise<PlannedItemWithContentGroup[]> {
     // Drizzle ORM should handle matching the JS Date object to the database date column,
     // ignoring the time part if the column type is `date`.
+    console.log(`[getPlannedItemsForWeek] Querying for Monday: ${mondayWeekStartDate.toISOString()}`);
+
     return db.query.classCurriculumPlan.findMany({
         where: and(
             eq(classCurriculumPlan.classId, classId),
-            eq(classCurriculumPlan.weekStartDate, weekStartDate) // Use Date object
+            // Query directly with the Monday date - assumes DB will be updated
+            eq(classCurriculumPlan.weekStartDate, mondayWeekStartDate) 
         ),
         with: {
             contentGroup: {
-                columns: { name: true } // Only need the name
+                columns: { name: true } 
             }
         },
-        orderBy: (planItems, { asc }) => [asc(planItems.contentGroupId)], // Consistent order
+        orderBy: (planItems, { asc }) => [asc(planItems.contentGroupId)],
     });
 }
 

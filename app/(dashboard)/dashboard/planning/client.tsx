@@ -59,25 +59,20 @@ interface PlanningBoardClientProps {
   currentClassId: number;
 }
 
-// Helper to get weeks between two dates
+// Helper function to get weeks between two dates (Ensure this matches Grading page version if needed)
 function getWeeksBetween(startDate: Date, endDate: Date): Date[] {
   const weeks: Date[] = [];
   let currentDate = new Date(startDate);
-
-  // Adjust to the previous Monday
-  const dayOfWeek = currentDate.getDay(); // Sunday = 0, Monday = 1, ...
-  const diff = currentDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust to Monday
+  const dayOfWeek = currentDate.getDay();
+  const diff = currentDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
   currentDate = new Date(currentDate.setDate(diff));
-  currentDate.setHours(0, 0, 0, 0); // Normalize time
-
+  currentDate.setHours(0, 0, 0, 0);
   const finalEndDate = new Date(endDate);
   finalEndDate.setHours(0, 0, 0, 0);
-
   while (currentDate <= finalEndDate) {
-    weeks.push(new Date(currentDate));
-    currentDate.setDate(currentDate.getDate() + 7);
+      weeks.push(new Date(currentDate));
+      currentDate.setDate(currentDate.getDate() + 7);
   }
-
   return weeks;
 }
 
@@ -220,36 +215,26 @@ export default function PlanningBoardClient({
     return terms.find(t => t.termNumber === selectedTermNumber);
   }, [selectedTermNumber, terms]);
 
-  // Helper function to format dates consistently
-  const formatDate = (date: Date | string) => {
-    const d = new Date(date);
-    return d.toISOString().split('T')[0]; // YYYY-MM-DD format
-  };
-
-  // Helper function to normalize dates for comparison
-  const normalizeDate = (date: Date | string) => {
-    const d = new Date(date);
-    // Set to midnight UTC to avoid timezone issues
-    d.setUTCHours(0, 0, 0, 0);
-    return d.getTime();
+  // Updated formatDate helper (ensure consistency)
+  const formatDate = (date: Date | string): string => {
+      try {
+          const d = new Date(date);
+          const year = d.getFullYear();
+          const month = (d.getMonth() + 1).toString().padStart(2, '0');
+          const day = d.getDate().toString().padStart(2, '0');
+          return `${year}-${month}-${day}`;
+      } catch (e) {
+          console.error("Error formatting date:", date, e);
+          return '';
+      }
   };
 
   const weeksInSelectedTerm = useMemo(() => {
     if (!selectedTerm?.startDate || !selectedTerm?.endDate) return [];
     const start = new Date(selectedTerm.startDate);
     const end = new Date(selectedTerm.endDate);
-    
-    console.log('Term dates:', {
-      start: formatDate(start),
-      end: formatDate(end)
-    });
-    
     if (isNaN(start.getTime()) || isNaN(end.getTime())) return [];
-    const weeks = getWeeksBetween(start, end);
-    
-    console.log('Generated weeks:', weeks.map(w => formatDate(w)));
-    
-    return weeks;
+    return getWeeksBetween(start, end);
   }, [selectedTerm]);
 
   const filteredContentGroups = useMemo(() => {
@@ -309,11 +294,16 @@ export default function PlanningBoardClient({
         };
 
         // Debug log
-        console.log('Adding new item:', newItem);
+        console.log('Adding new item (client-side object):', newItem);
+        console.log('Sending to server action with date:', formatDate(weekStartDate)); // Log the formatted date being sent
         
         setPlanItems(prev => [...prev, newItem]);
 
-        addPlanItem({ classId: currentClassId, contentGroupId, weekStartDate })
+        addPlanItem({ 
+            classId: currentClassId, 
+            contentGroupId, 
+            weekStartDate: formatDate(weekStartDate) // Format to YYYY-MM-DD string
+        })
           .then((result: ActionResult) => {
             if (result.error) {
               toast.error(`Failed to add plan item: ${result.error}`);
@@ -430,43 +420,34 @@ export default function PlanningBoardClient({
               <ScrollArea className="flex-1" type="always">
                 <div className="flex space-x-2 p-2 min-w-fit">
                   {weeksInSelectedTerm.map((weekStartDate) => {
-                    // Use normalized date comparison
+                    // Updated Filtering Logic using formatDate
+                    const weekDateString = formatDate(weekStartDate);
                     const itemsInWeek = planItems.filter(item => {
-                      const itemDate = normalizeDate(item.weekStartDate);
-                      const weekDate = normalizeDate(weekStartDate);
-                      const matches = itemDate === weekDate;
-                      
-                      console.log('Week comparison:', {
-                        weekStartDate: formatDate(weekStartDate),
-                        itemWeekStart: formatDate(item.weekStartDate),
-                        itemId: item.id,
-                        contentGroupId: item.contentGroupId,
-                        matches
-                      });
-                      
+                      const itemDateString = formatDate(item.weekStartDate);
+                      const matches = itemDateString === weekDateString;
+                       // Keep console log for debugging if needed
+                       console.log('Week comparison (Planning):', {
+                           weekString: weekDateString,
+                           itemWeekString: itemDateString,
+                           itemId: item.id,
+                           matches
+                       });
                       return matches;
                     });
 
-                    // Log items found for this week
-                    if (itemsInWeek.length > 0) {
-                      console.log(`Items for week ${formatDate(weekStartDate)}:`, 
-                        itemsInWeek.map(item => ({
-                          id: item.id,
-                          contentGroupId: item.contentGroupId,
-                          name: contentGroupMap.get(item.contentGroupId)
-                        }))
-                      );
-                    }
-
                     return (
-                      <DroppableWeekColumn key={weekStartDate.toISOString()} weekStartDate={weekStartDate}>
-                        {itemsInWeek.map(item => (
+                      <DroppableWeekColumn key={weekDateString} weekStartDate={weekStartDate}>
+                        {itemsInWeek.map((item) => (
                           <DraggablePlanItem
                             key={item.id}
                             item={item}
                             contentGroupName={contentGroupMap.get(item.contentGroupId)}
                           />
                         ))}
+                        {/* Placeholder if column is empty? */}
+                         {itemsInWeek.length === 0 && (
+                           <div className="text-center text-xs text-muted-foreground pt-4">Drop here</div>
+                         )}
                       </DroppableWeekColumn>
                     );
                   })}

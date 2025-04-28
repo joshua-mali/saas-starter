@@ -54,8 +54,8 @@ export default function ClassReportClient({ classId, studentReportData, outcomeH
                 {studentReportData.map(student => (
                     <TableRow key={student.studentId}>
                         <TableCell className="font-medium">
-                            {/* Link to student profile page remains the same */}
-                            <Link href={`/dashboard/students/${classId}/${student.studentId}`}>
+                            {/* Link to student profile page - updated format */}
+                            <Link href={`/dashboard/students/${student.studentId}?classId=${classId}`}>
                                 <span className="hover:underline cursor-pointer text-blue-600">
                                     {student.studentFirstName} {student.studentLastName}
                                 </span>

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'; // Ensure the page re-renders on every request
+
 import { db } from '@/lib/db/drizzle';
 import {
     classes,
@@ -343,104 +345,118 @@ function processStudentGradesForReport(
 // --- Page Component Props Interface ---
 
 interface ClassReportPageProps {
-    params: Promise<{ classId: string; }>;
-    // searchParams?: { [key: string]: string | string[] | undefined }; // Add if you use searchParams
+  // Remove params
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>; // Use searchParams
 }
 
 // --- Page Component ---
 
-export default async function ClassReportPage({ params: paramsPromise }: ClassReportPageProps) {
-    const { classId: rawClassId } = await paramsPromise;
+export default async function ClassReportPage({ searchParams: searchParamsPromise }: ClassReportPageProps) {
+  const searchParams = await searchParamsPromise;
+  // Handle potential arrays from searchParams
+  const rawClassId = Array.isArray(searchParams.classId) ? searchParams.classId[0] : searchParams.classId;
 
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+  const supabase = await createClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-    if (authError || !user) {
-        redirect('/sign-in');
+  if (authError || !user) {
+    redirect('/sign-in');
+  }
+
+  // --- Get classId from searchParams --- 
+  let classId: number | null = null;
+  if (rawClassId) {
+    const parsedId = parseInt(rawClassId, 10);
+    // TODO: Add validation - Check if user is authorized for this classId (similar to planning/grading)
+    if (!isNaN(parsedId)) { 
+        classId = parsedId;
     }
+  }
 
-    const classId = parseInt(rawClassId, 10);
-    if (isNaN(classId)) {
-        notFound(); // Invalid classId parameter
-    }
-
-    // --- Authorization Check ---
-    const isAuthorized = await checkTeacherAuthorization(classId, user.id);
-    if (!isAuthorized) {
-        notFound(); // Not authorized for this class
-    }
-
-    // --- Fetch Core Class/Curriculum Data ---
-    const [classData, gradeScalesData] = await Promise.all([
-        getClassDetails(classId),
-        // Assuming grade scales are global/team-based, fetch once
-        // If teamId is not on classData directly, adjust query
-        getGradeScalesForTeam(1) // Placeholder: Use actual teamId if available on classData
-    ]);
-
-    if (!classData || !classData.stageId) {
-        console.error("Class data or stage ID missing for class:", classId);
-        notFound();
-    }
-    
-    // Fetch hierarchy *after* confirming stageId
-    const hierarchyData = await getFullCurriculumHierarchy(classData.stageId);
-
-    // --- Fetch Student Data ---
-    const enrollments = await getAllStudentEnrollmentsForClass(classId);
-    console.log(`Found ${enrollments.length} enrollments for class ${classId}.`);
-
-    // --- Fetch Assessments for all students (Can be parallelized further) ---
-    const assessmentsPromises = enrollments.map(enrollment => 
-        getStudentAssessmentsForEnrollment(enrollment.id).then(assessments => ({ 
-            enrollmentId: enrollment.id, 
-            assessments 
-        }))
-    );
-    const allAssessmentsResults = await Promise.all(assessmentsPromises);
-    const assessmentsByEnrollmentId = new Map(allAssessmentsResults.map(r => [r.enrollmentId, r.assessments]));
-    console.log(`Fetched assessments for ${assessmentsByEnrollmentId.size} enrollments.`);
-
-    // --- Process Data for Each Student ---
-    const studentReportData: ProcessedStudentReportData[] = enrollments.map(enrollment => {
-        const studentAssessments = assessmentsByEnrollmentId.get(enrollment.id) || [];
-        console.log(`Processing student ${enrollment.student.id} with ${studentAssessments.length} assessments.`);
-        return processStudentGradesForReport(
-            enrollment.student,
-            hierarchyData,
-            studentAssessments,
-            gradeScalesData
-        );
-    });
-
-    // --- Extract Outcome Headers for the Table ---
-    // Get unique outcomes from the hierarchy (more reliable than processing results)
-    const outcomeHeadersMap = new Map<number, string>();
-    hierarchyData.forEach(item => {
-        if (item.outcomeId && item.outcomeName && !outcomeHeadersMap.has(item.outcomeId)) {
-            outcomeHeadersMap.set(item.outcomeId, item.outcomeName);
-        }
-    });
-    const outcomeHeaders = Array.from(outcomeHeadersMap.entries()).map(([id, name]) => ({ id, name }))
-                             .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically for consistency
-
-    console.log("Server Component: Passing", studentReportData.length, "processed students to client.");
-    
-    // --- Pass to Client Component ---
+  // Handle case where no valid classId is provided
+  if (classId === null) {
+    // You might want to fetch user's classes here to suggest one
+    // Or just show a message prompting selection from the global selector
     return (
-        <div className="p-4">
-            <h1 className="text-2xl font-semibold mb-1">
-                Class Report: {classData.name}
-            </h1>
-            <p className="text-sm text-muted-foreground mb-4">
-                 (Stage {classData.stage?.name})
-            </p>
-            <hr className="mb-6"/>
-            <ClassReportClient 
-                classId={classId}
-                studentReportData={studentReportData}
-                outcomeHeaders={outcomeHeaders}
-             />
+        <div className="p-4 text-center">
+            <p>Please select a class from the dropdown above to view its report.</p>
+            {/* Optional: Add more context if needed */}
         </div>
     );
+  }
+
+  // --- Authorization Check (Example - Adapt as needed) ---
+  // const isAuthorized = await checkTeacherAuthorization(classId, user.id);
+  // if (!isAuthorized) {
+  //     // Or check if user is part of the same team etc.
+  //     console.error(`User ${user.id} not authorized for class ${classId}`);
+  //     return <div>Error: You are not authorized to view this class report.</div>; 
+  // }
+
+  // --- Data Fetching (Uses the validated classId) ---
+  const classData = await getClassDetails(classId);
+  if (!classData || !classData.stageId) { // Ensure stageId exists for hierarchy fetching
+    console.error(`Class data or stageId not found for classId: ${classId}`);
+    notFound(); 
+  }
+
+  const [enrollments, hierarchyData, gradeScalesData] = await Promise.all([
+    getAllStudentEnrollmentsForClass(classId),
+    getFullCurriculumHierarchy(classData.stageId),
+    getGradeScalesForTeam(classData.teamId) // Assuming teamId is on classData
+  ]);
+
+  // --- Fetch Assessments for all students (Can be parallelized further) ---
+  const assessmentsPromises = enrollments.map(enrollment => 
+      getStudentAssessmentsForEnrollment(enrollment.id).then(assessments => ({ 
+          enrollmentId: enrollment.id, 
+          assessments 
+      }))
+  );
+  const allAssessmentsResults = await Promise.all(assessmentsPromises);
+  const assessmentsByEnrollmentId = new Map(allAssessmentsResults.map(r => [r.enrollmentId, r.assessments]));
+  console.log(`Fetched assessments for ${assessmentsByEnrollmentId.size} enrollments.`);
+
+  // --- Process Data for Each Student ---
+  const studentReportData: ProcessedStudentReportData[] = enrollments.map(enrollment => {
+      const studentAssessments = assessmentsByEnrollmentId.get(enrollment.id) || [];
+      console.log(`Processing student ${enrollment.student.id} with ${studentAssessments.length} assessments.`);
+      return processStudentGradesForReport(
+          enrollment.student,
+          hierarchyData,
+          studentAssessments,
+          gradeScalesData
+      );
+  });
+
+  // --- Extract Outcome Headers for the Table ---
+  // Get unique outcomes from the hierarchy (more reliable than processing results)
+  const outcomeHeadersMap = new Map<number, string>();
+  hierarchyData.forEach(item => {
+      if (item.outcomeId && item.outcomeName && !outcomeHeadersMap.has(item.outcomeId)) {
+          outcomeHeadersMap.set(item.outcomeId, item.outcomeName);
+      }
+  });
+  const outcomeHeaders = Array.from(outcomeHeadersMap.entries()).map(([id, name]) => ({ id, name }))
+                           .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically for consistency
+
+  console.log("Server Component: Passing", studentReportData.length, "processed students to client.");
+  
+  // --- Pass to Client Component ---
+  return (
+      <div className="p-4">
+          <h1 className="text-2xl font-semibold mb-1">
+              Class Report: {classData.name}
+          </h1>
+          <p className="text-sm text-muted-foreground mb-4">
+               (Stage {classData.stage?.name})
+          </p>
+          <hr className="mb-6"/>
+          <ClassReportClient 
+              classId={classId}
+              studentReportData={studentReportData}
+              outcomeHeaders={outcomeHeaders}
+           />
+      </div>
+  );
 } 

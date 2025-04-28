@@ -239,52 +239,76 @@ function processStudentGrades(
 }
 
 interface StudentOverviewPageProps {
-    params: Promise<{ classId: string; studentId: string; }>;
-    // searchParams?: Promise<{ [key: string]: string | string[] | undefined }>; // Add if needed
+    params: Promise<{ studentId: string; }>; // Only studentId from route
+    searchParams: Promise<{ classId?: string | string[] | undefined }>; // classId from query
 }
 
 export default async function StudentOverviewPage({
-    params: paramsPromise
+    params: paramsPromise,
+    searchParams: searchParamsPromise
 }: StudentOverviewPageProps) {
-    const { classId: rawClassId, studentId: rawStudentId } = await paramsPromise;
+    const { studentId: rawStudentId } = await paramsPromise;
+    const searchParams = await searchParamsPromise;
+    const rawClassId = Array.isArray(searchParams.classId) ? searchParams.classId[0] : searchParams.classId;
+
+    const studentId = parseInt(rawStudentId, 10);
+    if (isNaN(studentId)) {
+        console.error("Invalid studentId parameter:", rawStudentId);
+        notFound();
+    }
 
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-
     if (authError || !user) {
         redirect('/sign-in');
     }
 
-    const classId = parseInt(rawClassId, 10);
-    const studentId = parseInt(rawStudentId, 10);
-
-    if (isNaN(classId) || isNaN(studentId)) {
-        notFound(); // Invalid parameters
+    // --- Get classId from searchParams --- 
+    let classId: number | null = null;
+    if (rawClassId) {
+        const parsedId = parseInt(rawClassId, 10);
+        if (!isNaN(parsedId)) {
+            classId = parsedId;
+        } else {
+            console.warn(`Invalid classId in searchParams: ${rawClassId}`);
+        }
     }
 
-    // --- Authorization Check ---
-    const isAuthorized = await checkTeacherAuthorization(classId, user.id);
-    if (!isAuthorized) {
-        notFound(); // User is not a teacher for this class
+    // Handle case where no valid classId is provided in searchParams
+    if (classId === null) {
+        // TODO: Optionally fetch classes the student is enrolled in?
+        return (
+            <div className="p-4 text-center">
+                <p>Please select a class from the global dropdown to view this student's details for that class.</p>
+                {/* You could add a link back to the main students page or dashboard */}
+            </div>
+        );
     }
 
-    // --- Fetch Core Data Concurrently ---
-    const [enrollment, classData] = await Promise.all([
-        getStudentEnrollment(classId, studentId),
-        getClassDetails(classId),
-    ]);
+    // --- Authorization Check (Example) ---
+    // const isAuthorized = await checkTeacherAuthorization(classId, user.id); // Check if teacher teaches this class
+    // if (!isAuthorized) {
+    //     console.error(`User ${user.id} not authorized for class ${classId}`);
+    //     return <div>Error: You are not authorized to view this student's details for this class.</div>;
+    // }
 
-    if (!enrollment || !classData || !classData.stageId) {
-        // Student not enrolled in this class, class doesn't exist, or class has no stage
-        console.error("Enrollment or ClassData missing or incomplete", { enrollment, classData });
+    // --- Data Fetching (Uses validated studentId and classId) ---
+    const enrollment = await getStudentEnrollment(classId, studentId);
+    if (!enrollment) {
+        console.error(`Enrollment not found for student ${studentId} in class ${classId}`);
+        notFound(); // Student not found in this specific class
+    }
+
+    const classData = await getClassDetails(classId);
+    if (!classData || !classData.stageId || !classData.teamId) {
+        console.error(`Class data, stageId, or teamId not found for classId: ${classId}`);
         notFound();
     }
 
-    // --- Fetch Dependent Data Concurrently ---
     const [hierarchyData, assessmentsData, gradeScalesData] = await Promise.all([
         getFullCurriculumHierarchy(classData.stageId),
-        getStudentAssessmentsForEnrollment(enrollment.id),
-        getGradeScalesForTeam(classData.teamId), // Assumes grade scales are global for now
+        getStudentAssessmentsForEnrollment(enrollment.id), // Use enrollment ID
+        getGradeScalesForTeam(classData.teamId)
     ]);
     
     console.log(`Fetched ${hierarchyData.length} hierarchy items.`);
