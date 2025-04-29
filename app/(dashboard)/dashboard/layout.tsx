@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { BookOpen, ClipboardCheck, HomeIcon, LayoutPanelLeft, Menu, Settings, UsersRound } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
 export default function DashboardLayout({
@@ -13,6 +13,7 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const navItems = [
@@ -51,25 +52,30 @@ export default function DashboardLayout({
           }`}
         >
           <nav className="h-full overflow-y-auto p-4">
-            {navItems.map((item) => (
-              <Link key={item.href} href={item.href} passHref>
-                <Button
-                  variant={pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href)) ? 'secondary' : 'ghost'}
-                  className={`shadow-none my-1 w-full justify-start ${
-                    pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href)) ? 'bg-gray-100' : ''
-                  }`}
-                  onClick={() => setIsSidebarOpen(false)}
-                >
-                  <item.icon className="mr-2 h-4 w-4" />
-                  {item.label}
-                </Button>
-              </Link>
-            ))}
+            {navItems.map((item) => {
+              const currentClassId = searchParams.get('classId');
+              const href = currentClassId ? `${item.href}?classId=${currentClassId}` : item.href;
+
+              return (
+                <Link key={item.href} href={href} passHref>
+                  <Button
+                    variant={pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href)) ? 'secondary' : 'ghost'}
+                    className={`shadow-none my-1 w-full justify-start ${
+                      pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href)) ? 'bg-gray-100' : ''
+                    }`}
+                    onClick={() => setIsSidebarOpen(false)}
+                  >
+                    <item.icon className="mr-2 h-4 w-4" />
+                    {item.label}
+                  </Button>
+                </Link>
+              );
+            })}
           </nav>
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 h-full overflow-y-auto">{children}</main>
+        <main className="flex-1 h-full overflow-y-auto p-6">{children}</main>
       </div>
     </div>
   );

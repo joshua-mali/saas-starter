@@ -25,14 +25,10 @@ export function ClassSelectorClient({
     const searchParams = useSearchParams();
     const [isPending, startTransition] = useTransition();
 
-    // Get the current classId from URL search params
-    const currentClassId = searchParams.get('classId');
-
-    // Determine the default/selected value for the dropdown
-    // Prioritize URL param, then first taught class, then first available class
     const [selectedValue, setSelectedValue] = useState<string>(() => {
-        if (currentClassId && allTeamClasses.some(c => c.id.toString() === currentClassId)) {
-            return currentClassId;
+        const classIdFromUrl = searchParams.get('classId');
+        if (classIdFromUrl && allTeamClasses.some(c => c.id.toString() === classIdFromUrl)) {
+            return classIdFromUrl;
         }
         if (userTaughtClasses.length > 0) {
             return userTaughtClasses[0].id.toString();
@@ -43,19 +39,33 @@ export function ClassSelectorClient({
         return ''; // Should not happen if component rendered
     });
 
-    // Effect to update selectedValue if URL changes externally
+    // Effect to synchronize URL with default selection on initial load if needed
+    useEffect(() => {
+        const classIdFromUrl = searchParams.get('classId');
+        // If URL has no classId, but we have a valid default selectedValue
+        if (!classIdFromUrl && selectedValue && allTeamClasses.some(c => c.id.toString() === selectedValue)) {
+            startTransition(() => {
+                const newSearchParams = new URLSearchParams(searchParams.toString());
+                newSearchParams.set('classId', selectedValue);
+                // Replace the URL state instead of pushing a new entry
+                // to avoid back-button confusion on initial load.
+                router.replace(`${pathname}?${newSearchParams.toString()}`, { scroll: false }); 
+            });
+        }
+        // Run only once when selectedValue is determined or searchParams change initially
+    }, [selectedValue, searchParams, pathname, router, allTeamClasses]);
+
+    // Effect to update selectedValue if URL changes externally (e.g., back/forward)
     useEffect(() => {
         const classIdFromUrl = searchParams.get('classId');
         if (classIdFromUrl && allTeamClasses.some(c => c.id.toString() === classIdFromUrl)) {
             if (classIdFromUrl !== selectedValue) {
                 setSelectedValue(classIdFromUrl);
             }
-        } else {
-             // If URL param is invalid or missing, maybe reset to default?
-             // Or keep current selection? Let's keep current selection for now.
-             // Consider if resetting to default is better UX.
-        }
-    }, [searchParams, allTeamClasses, selectedValue]);
+        } 
+        // We don't necessarily need an else here now, because the initial load effect
+        // should handle setting the URL if it was missing.
+    }, [searchParams, allTeamClasses, selectedValue]); // Keep selectedValue dependency?
 
     const handleClassChange = (newClassIdString: string) => {
         if (!newClassIdString || newClassIdString === selectedValue) return;
@@ -65,7 +75,6 @@ export function ClassSelectorClient({
         startTransition(() => {
             const newSearchParams = new URLSearchParams(searchParams.toString());
             newSearchParams.set('classId', newClassIdString);
-            // Preserve other search params (like 'week')
             router.push(`${pathname}?${newSearchParams.toString()}`);
         });
     };

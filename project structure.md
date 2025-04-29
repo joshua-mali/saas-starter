@@ -10,6 +10,7 @@
                 └── actions.ts
                 └── client.tsx
                 └── page.tsx
+            └── conditional-class-selector.tsx
             └── 📁grading
                 └── actions.ts
                 └── client.tsx
@@ -22,19 +23,16 @@
                 └── client.tsx
                 └── page.tsx
             └── 📁report
-                └── 📁[classId]
-                    └── client.tsx
-                    └── page.tsx
+                └── client.tsx
+                └── page.tsx
             └── 📁settings
             └── settings.tsx
                 └── actions.ts
                 └── page.tsx
             └── 📁students
-                └── 📁[classId]
-                    └── 📁[studentId]
-                        └── client.tsx
-                        └── page.tsx
                 └── 📁[studentId]
+                    └── client.tsx
+                    └── page.tsx
                 └── actions.ts
                 └── client.tsx
                 └── page.tsx
