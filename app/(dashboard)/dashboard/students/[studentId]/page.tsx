@@ -238,6 +238,60 @@ function processStudentGrades(
     return structuredHierarchy;
 }
 
+// --- Type Definition for Top/Bottom Groups ---
+type RankedGroup = {
+    id: number;
+    name: string;
+    gradeName: string | null;
+    averageGrade: number | null; // Keep average for clarity if needed
+};
+
+// --- Helper to Extract and Rank Content Groups ---
+function extractTopBottomGroups(processedHierarchy: Record<number, ProcessedNode>): {
+    topGroups: RankedGroup[];
+    bottomGroups: RankedGroup[];
+} {
+    const allContentGroups: ProcessedNode[] = [];
+
+    // Recursive function to find all content groups
+    function findContentGroups(node: ProcessedNode) {
+        if (node.type === 'contentGroup') {
+            allContentGroups.push(node);
+        }
+        // Recurse through children regardless of parent type
+        Object.values(node.children).forEach(findContentGroups);
+    }
+
+    // Start traversal from each subject
+    Object.values(processedHierarchy).forEach(findContentGroups);
+
+    // Filter groups that have a calculated average grade
+    const gradedContentGroups = allContentGroups
+        .filter(cg => cg.averageGrade !== null && typeof cg.averageGrade === 'number')
+        // Ensure averageGrade is treated as number for sorting
+        .sort((a, b) => (b.averageGrade!) - (a.averageGrade!)); // Sort descending by average grade
+
+    console.log(`[extractTopBottomGroups] Found ${gradedContentGroups.length} graded content groups.`);
+
+    const topGroups = gradedContentGroups.slice(0, 3).map(cg => ({
+        id: cg.id,
+        name: cg.name,
+        gradeName: cg.gradeName ?? null,
+        averageGrade: cg.averageGrade ?? null // Ensure null if undefined
+    }));
+
+    const bottomGroups = gradedContentGroups.length > 3 
+        ? gradedContentGroups.slice(-3).reverse().map(cg => ({ // Reverse to show lowest first
+            id: cg.id,
+            name: cg.name,
+            gradeName: cg.gradeName ?? null,
+            averageGrade: cg.averageGrade ?? null // Ensure null if undefined
+          })) 
+        : []; // Avoid duplicating if less than 7 groups total
+
+    return { topGroups, bottomGroups };
+}
+
 interface StudentOverviewPageProps {
     params: Promise<{ studentId: string; }>; // Only studentId from route
     searchParams: Promise<{ classId?: string | string[] | undefined }>; // classId from query
@@ -317,6 +371,7 @@ export default async function StudentOverviewPage({
 
     // --- Process Data ---
     const processedGrades = processStudentGrades(hierarchyData, assessmentsData, gradeScalesData);
+    const { topGroups, bottomGroups } = extractTopBottomGroups(processedGrades);
 
     // --- Pass to Client Component --- 
     return (
@@ -332,6 +387,8 @@ export default async function StudentOverviewPage({
                 student={enrollment.student} 
                 classData={classData} 
                 structuredGrades={processedGrades} 
+                topContentGroups={topGroups}
+                bottomContentGroups={bottomGroups}
              />
         </div>
     );
