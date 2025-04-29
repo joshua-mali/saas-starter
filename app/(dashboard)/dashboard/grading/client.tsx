@@ -294,16 +294,44 @@ export default function GradingTableClient({
                             <SelectValue placeholder="Select Week..." />
                         </SelectTrigger>
                         <SelectContent>
-                            {allWeeks.map((week, index) => {
+                            {allWeeks.map((week, globalIndex) => {
                                 const weekStr = formatDate(week);
-                                // Find term for this week
-                                const term = terms.find(t => 
-                                    new Date(week) >= new Date(t.startDate) && 
-                                    new Date(week) <= new Date(t.endDate)
-                                );
-                                const weekNumberInTerm = term ? 
-                                    Math.floor((new Date(week).getTime() - new Date(term.startDate).getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
-                                    : 'N/A';
+                                
+                                // Find the term this week belongs to more accurately
+                                const term = terms.find(t => {
+                                    // Calculate Monday of the week the term starts
+                                    const termStartMonday = new Date(t.startDate);
+                                    const day = termStartMonday.getDay();
+                                    const diff = termStartMonday.getDate() - day + (day === 0 ? -6 : 1);
+                                    termStartMonday.setDate(diff);
+                                    termStartMonday.setHours(0, 0, 0, 0);
+
+                                    // Get term end date
+                                    const termEndDate = new Date(t.endDate);
+                                    termEndDate.setHours(0, 0, 0, 0);
+
+                                    // Check if the current week's Monday falls within the term's effective range
+                                    return week.getTime() >= termStartMonday.getTime() && week.getTime() <= termEndDate.getTime();
+                                });
+
+                                let weekNumberInTerm: number | string = 'N/A';
+                                if (term) {
+                                    // Find the index within allWeeks of the first Monday associated with this term
+                                    const firstWeekOfTermIndex = allWeeks.findIndex(w => {
+                                        const termStartMonday = new Date(term.startDate);
+                                        const day = termStartMonday.getDay();
+                                        const diff = termStartMonday.getDate() - day + (day === 0 ? -6 : 1);
+                                        termStartMonday.setDate(diff);
+                                        termStartMonday.setHours(0, 0, 0, 0);
+                                        return w.getTime() >= termStartMonday.getTime(); 
+                                    });
+
+                                    // Calculate week number relative to the start of the term weeks
+                                    if (firstWeekOfTermIndex !== -1) {
+                                        weekNumberInTerm = globalIndex - firstWeekOfTermIndex + 1;
+                                    }
+                                }
+
                                 return (
                                     <SelectItem key={weekStr} value={weekStr}>
                                         Week {weekNumberInTerm} {term ? `(Term ${term.termNumber})` : ''} - {weekStr}

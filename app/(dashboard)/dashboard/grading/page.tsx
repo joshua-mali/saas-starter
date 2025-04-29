@@ -47,16 +47,26 @@ const formatDate = (date: Date | string): string => {
 // Helper to get weeks between two dates
 function getWeeksBetween(startDate: Date, endDate: Date): Date[] {
     const weeks: Date[] = [];
-    let currentDate = new Date(startDate);
-    const dayOfWeek = currentDate.getDay();
-    const diff = currentDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-    currentDate = new Date(currentDate.setDate(diff));
-    currentDate.setHours(0, 0, 0, 0);
+    // const termStartDate = new Date(startDate); // Don't need this extra variable now
+    // termStartDate.setHours(0, 0, 0, 0);
+
+    // Calculate the Monday of the week the term starts in
+    let currentMonday = new Date(startDate);
+    const dayOfWeek = currentMonday.getDay();
+    const diff = currentMonday.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+    currentMonday = new Date(currentMonday.setDate(diff));
+    currentMonday.setHours(0, 0, 0, 0);
+    
     const finalEndDate = new Date(endDate);
     finalEndDate.setHours(0, 0, 0, 0);
-    while (currentDate <= finalEndDate) {
-      weeks.push(new Date(currentDate));
-      currentDate.setDate(currentDate.getDate() + 7);
+    
+    while (currentMonday <= finalEndDate) {
+      // Remove the filtering condition - always add the Monday within the loop range
+      // if (currentMonday.getTime() >= termStartDate.getTime()) { 
+        weeks.push(new Date(currentMonday));
+      // }
+      // Increment to the next Monday
+      currentMonday.setDate(currentMonday.getDate() + 7); 
     }
     return weeks;
 }
