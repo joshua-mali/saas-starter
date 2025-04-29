@@ -27,8 +27,8 @@ import {
     type Term
 } from '@/lib/db/schema';
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from 'react';
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { toast } from "sonner";
 import { saveAssessment } from "./actions"; // Import the server action
 
@@ -40,19 +40,16 @@ type PlannedItemWithContentGroup = ClassCurriculumPlanItem & { contentGroup: { n
 // type SimpleClass = { id: number; name: string };
 
 interface GradingTableClientProps {
-    classData: Class & { stage: Stage | null }; // classData still needed for display
+    classData: Class & { stage: Stage | null };
     students: StudentWithEnrollment[];
     gradeScales: GradeScale[];
     plannedItems: PlannedItemWithContentGroup[];
     initialAssessments: StudentAssessment[];
     terms: Term[];
-    currentWeek: Date; // Pass the specific week being viewed
-    allWeeks: Date[]; // Use pre-calculated weeks from server
-    // Remove props related to the class selector previously here
-    // currentClassId: number;
-    // userTaughtClasses: SimpleClass[];
-    // allTeamClasses: SimpleClass[];
-    currentClassId: number; // Keep currentClassId to know which class we are viewing
+    currentWeek: Date;
+    allWeeks: Date[];
+    // Prop for initial ID, can be null if URL is missing it initially
+    currentClassId: number | null; 
 }
 
 // Helper function to format dates consistently to YYYY-MM-DD
@@ -71,99 +68,101 @@ const formatDate = (date: Date | string): string => {
 };
 
 export default function GradingTableClient({
-    classData,
-    students,
+    classData: initialClassData,
+    students: initialStudents,
     gradeScales,
-    plannedItems,
+    plannedItems: initialPlannedItems,
     initialAssessments,
     terms,
-    currentWeek,
+    currentWeek: initialCurrentWeek,
     allWeeks,
-    // Remove destructured props
-    currentClassId, // Keep this one
-    // userTaughtClasses, 
-    // allTeamClasses,
+    currentClassId: initialClassId, // Rename prop
 }: GradingTableClientProps) {
 
-    // --- Log props received by client ---
-    console.log('[GradingTable Client] Received Props:', {
-        classId: currentClassId, // Use currentClassId prop
+    const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
+
+    // Derive classId primarily from URL, fall back to initial prop
+    const classIdFromUrl = searchParams.get('classId');
+    const currentClassId = classIdFromUrl ? parseInt(classIdFromUrl, 10) : initialClassId;
+
+    // Derive week primarily from URL, fall back to initial prop
+    const weekFromUrl = searchParams.get('week'); // Week is expected as YYYY-MM-DD string
+    const currentWeek = useMemo(() => 
+        weekFromUrl ? new Date(weekFromUrl + 'T00:00:00') : initialCurrentWeek, 
+        [weekFromUrl, initialCurrentWeek]
+    );
+
+    // Local state for data that might change based on URL params
+    const [assessments, setAssessments] = useState<StudentAssessment[]>(initialAssessments);
+    const [students, setStudents] = useState(initialStudents);
+    const [plannedItems, setPlannedItems] = useState(initialPlannedItems);
+    const [classData, setClassData] = useState(initialClassData);
+
+    // Effect to update local state when initial props change 
+    // (e.g., after navigation finishes and server component refetches)
+    useEffect(() => {
+        setAssessments(initialAssessments);
+        setStudents(initialStudents);
+        setPlannedItems(initialPlannedItems);
+        setClassData(initialClassData);
+        // Note: currentWeek is handled by the useMemo above
+    }, [initialAssessments, initialStudents, initialPlannedItems, initialClassData]);
+
+    const [isPending, startTransition] = useTransition();
+
+    // --- Log props/state --- 
+    console.log('[GradingTable Client] Render State:', {
+        classId: currentClassId, // Use derived currentClassId
         currentWeek: formatDate(currentWeek),
         plannedItemsCount: plannedItems.length,
-        plannedItemsSample: plannedItems.slice(0, 5).map(p => ({ id: p.id, name: p.contentGroup.name })), // Log first 5 planned item IDs/names
-        initialAssessmentsCount: initialAssessments.length,
-        initialAssessmentsSample: initialAssessments.slice(0, 10).map(a => ({ // Log first 10 assessment details
-            id: a.id,
-            enrollmentId: a.studentEnrollmentId,
-            planId: a.classCurriculumPlanId,
-            gradeId: a.gradeScaleId,
-            date: a.assessmentDate
-        }))
+        assessmentsCount: assessments.length,
     });
     // --- End Logging ---
 
-    const [assessments, setAssessments] = useState<StudentAssessment[]>(initialAssessments);
-    const [isPending, startTransition] = useTransition();
-    const router = useRouter();
-    // Remove client-side class selection logic
-    // const pathname = usePathname();
-    // const searchParams = useSearchParams();
-    // const [selectedValue, setSelectedValue] = useState(...);
-    // useEffect(...);
-    // const handleClassChange = (...);
-
-    // --- Week Navigation Logic (using pre-calculated allWeeks) ---
+    // --- Week Navigation Logic ---
     const currentWeekIndex = useMemo(() => {
         const currentWeekString = formatDate(currentWeek);
-        console.log(`[Grading Client] Current Week String: ${currentWeekString}`);
-        console.log('[Grading Client] All Weeks Strings:', allWeeks.map(w => formatDate(w)));
-        // Find index by comparing YYYY-MM-DD strings
         const index = allWeeks.findIndex(week => formatDate(week) === currentWeekString);
-        console.log(`[Grading Client] Calculated currentWeekIndex (Date String Match): ${index}`);
-        // Fallback check if string match fails (shouldn't be needed now, but keep for safety)
-        if (index === -1) {
-             console.warn('[Grading Client] Date string match failed, attempting timestamp match as fallback...');
-             const currentWeekTime = new Date(currentWeek).setHours(0,0,0,0); // Normalize time for comparison
-             const fallbackIndex = allWeeks.findIndex(week => new Date(week).setHours(0,0,0,0) === currentWeekTime);
-             console.log(`[Grading Client] Fallback timestamp match index: ${fallbackIndex}`);
-             return fallbackIndex; // Use fallback index if primary failed
-        }
         return index;
     }, [currentWeek, allWeeks]);
 
     const canGoPrev = currentWeekIndex > 0;
     const canGoNext = currentWeekIndex < allWeeks.length - 1;
-    console.log(`[Grading Client] Navigation State: canGoPrev=${canGoPrev}, canGoNext=${canGoNext}, index=${currentWeekIndex}, totalWeeks=${allWeeks.length}`);
 
     const navigateToWeek = (weekDate: Date) => {
+        if (!currentClassId) return; // Should not happen if URL logic is correct
         const formattedDate = formatDate(weekDate);
+        // Construct URL with classId derived from URL state
         const targetUrl = `/dashboard/grading?classId=${currentClassId}&week=${formattedDate}`;
         console.log(`[Grading Client] Navigating to URL: ${targetUrl}`);
         router.push(targetUrl); 
     };
     const handlePreviousWeek = () => {
         if (canGoPrev) {
-            console.log(`[Grading Client] Handling Previous Week. Index: ${currentWeekIndex}, Target Index: ${currentWeekIndex - 1}`);
             navigateToWeek(allWeeks[currentWeekIndex - 1]);
         }
     };
     const handleNextWeek = () => {
         if (canGoNext) {
-            console.log(`[Grading Client] Handling Next Week. Index: ${currentWeekIndex}, Target Index: ${currentWeekIndex + 1}`);
             navigateToWeek(allWeeks[currentWeekIndex + 1]);
         }
     };
 
     const currentWeekFormatted = formatDate(currentWeek);
-    console.log(`[Grading Client] Initial formatted week for Select value: ${currentWeekFormatted}`);
 
     // --- Grade Change Handler ---
     const handleGradeChange = (
         studentEnrollmentId: number,
         classCurriculumPlanId: number,
         contentGroupId: number,
-        newGradeScaleId: number | null // Can be null if unsetting
+        newGradeScaleId: number | null
     ) => {
+        if (!currentClassId) {
+            toast.error("Cannot save grade: Class ID is missing.");
+            return; 
+        }
         // Find if an assessment already exists for this cell
         const existingAssessmentIndex = assessments.findIndex(
             a => a.studentEnrollmentId === studentEnrollmentId &&
@@ -213,10 +212,10 @@ export default function GradingTableClient({
             }
         }
 
-        // Call Server Action
+        // Call Server Action (ensure it uses the derived currentClassId)
         startTransition(() => {
             saveAssessment({
-                classId: currentClassId, // Use currentClassId prop here
+                classId: currentClassId, // Use derived currentClassId
                 studentEnrollmentId,
                 classCurriculumPlanId,
                 contentGroupId,
@@ -224,7 +223,7 @@ export default function GradingTableClient({
                 gradeScaleId: newGradeScaleId, // Assured not null by logic above
                 notes: existingAssessment?.notes ?? null,
                 assessmentIdToUpdate: existingAssessment?.id, // Pass ID if updating
-                weekStartDate: formatDate(currentWeek) // Pass the correct week start date string
+                weekStartDate: formatDate(currentWeek) // Use derived currentWeek
             }).then(result => {
                 if (result.error) {
                     toast.error(`Failed to save grade: ${result.error}`);
@@ -256,16 +255,25 @@ export default function GradingTableClient({
         });
     };
 
+    // --- Rendering Logic ---
+
+    // Display message if class ID is missing
+    if (!currentClassId) {
+        return (
+            <div className="flex items-center justify-center h-full">
+                <p className="text-muted-foreground">Please select a class first.</p>
+            </div>
+        );
+    }
+
     return (
-        <div className="flex flex-col h-full">
-            {/* Header Section - Remove Class Selector, keep Week Navigation */}
-            <div className="flex justify-between items-center p-4 border-b flex-shrink-0 flex-wrap gap-4">
-                 {/* Display current class name and week */}
-                 <h1 className="text-xl font-semibold flex-shrink-0">
-                     Grading: {classData.name} - Week of {new Date(currentWeek).toLocaleDateString('en-AU')}
+        <div className="p-4 space-y-4">
+            {/* Header Section: Class Name, Week Navigation */}
+            <div className="flex justify-between items-center">
+                 {/* Use classData state */}
+                <h1 className="text-xl font-semibold">
+                    Grading: {classData?.name ?? 'Loading...'} ({classData?.calendarYear})
                 </h1>
-                
-                {/* Week Navigation Controls */}
                 <div className="flex items-center space-x-2">
                     <Button
                         variant="outline"
@@ -274,23 +282,31 @@ export default function GradingTableClient({
                         disabled={!canGoPrev || isPending}
                     >
                         <ChevronLeft className="h-4 w-4" />
-                        <span className="sr-only">Previous Week</span>
                     </Button>
-                    {/* Week Selector Dropdown */}
                     <Select
-                        value={currentWeekFormatted}
-                        onValueChange={(value) => navigateToWeek(new Date(value))}
+                        value={currentWeekFormatted} // Use formatted string derived from currentWeek state
+                        onValueChange={(weekString) => {
+                            if (weekString) navigateToWeek(new Date(weekString + 'T00:00:00'));
+                        }}
                         disabled={isPending}
                     >
                         <SelectTrigger className="w-[250px]">
-                            <SelectValue placeholder="Select week..." />
+                            <SelectValue placeholder="Select Week..." />
                         </SelectTrigger>
                         <SelectContent>
                             {allWeeks.map((week, index) => {
-                                const formattedWeekValue = formatDate(week);
+                                const weekStr = formatDate(week);
+                                // Find term for this week
+                                const term = terms.find(t => 
+                                    new Date(week) >= new Date(t.startDate) && 
+                                    new Date(week) <= new Date(t.endDate)
+                                );
+                                const weekNumberInTerm = term ? 
+                                    Math.floor((new Date(week).getTime() - new Date(term.startDate).getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
+                                    : 'N/A';
                                 return (
-                                    <SelectItem key={index} value={formattedWeekValue}>
-                                        {formattedWeekValue} 
+                                    <SelectItem key={weekStr} value={weekStr}>
+                                        Week {weekNumberInTerm} {term ? `(Term ${term.termNumber})` : ''} - {weekStr}
                                     </SelectItem>
                                 );
                             })}
@@ -303,14 +319,14 @@ export default function GradingTableClient({
                         disabled={!canGoNext || isPending}
                     >
                         <ChevronRight className="h-4 w-4" />
-                        <span className="sr-only">Next Week</span>
                     </Button>
                 </div>
             </div>
 
-            {/* Grading Table */}
-            <div className="flex-1 overflow-auto">
-                <Table className="min-w-full divide-y divide-gray-200">
+            {/* Grading Table */} 
+            {/* Use plannedItems state and students state */}
+            {(plannedItems.length > 0 && students.length > 0) ? (
+                <Table className="border">
                     <TableHeader>
                         <TableRow>
                             {/* Student Column - Fixed width */}
@@ -420,7 +436,11 @@ export default function GradingTableClient({
                         ))}
                     </TableBody>
                 </Table>
-            </div>
+            ) : (
+                <p className="text-muted-foreground text-center py-4">
+                    {plannedItems.length === 0 ? "No content planned for this week." : "No students found in this class."}
+                </p>
+            )}
         </div>
     );
 } 

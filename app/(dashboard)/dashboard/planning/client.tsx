@@ -15,6 +15,7 @@ import {
   type Stage,
   type Term
 } from '@/lib/db/schema'
+import { useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -34,7 +35,7 @@ import {
 } from '@dnd-kit/core'
 
 // Import server actions
-import { addPlanItem, updatePlanItem, type ActionResult } from './actions'
+import { addPlanItem, updatePlanItem } from './actions'
 
 // Type for content groups fetched by the server component
 type ContentGroupWithContext = {
@@ -56,7 +57,7 @@ interface PlanningBoardClientProps {
   terms: Term[];
   availableContentGroups: ContentGroupWithContext[];
   initialPlanItems: ClassCurriculumPlanItem[];
-  currentClassId: number;
+  currentClassId: number | null;
 }
 
 // Helper function to get weeks between two dates (Ensure this matches Grading page version if needed)
@@ -187,35 +188,35 @@ function DroppableWeekColumn({ weekStartDate, children }: DroppableWeekColumnPro
 }
 
 export default function PlanningBoardClient({
-  classData,
+  classData: initialClassData,
   terms,
   availableContentGroups,
   initialPlanItems,
-  currentClassId,
+  currentClassId: initialClassId,
 }: PlanningBoardClientProps) {
-  const [selectedTermNumber, setSelectedTermNumber] = useState<number | null>(terms[0]?.termNumber ?? null);
+  const searchParams = useSearchParams();
+
+  const classIdFromUrl = searchParams.get('classId');
+  const currentClassId = classIdFromUrl ? parseInt(classIdFromUrl, 10) : initialClassId;
+
   const [planItems, setPlanItems] = useState<ClassCurriculumPlanItem[]>(initialPlanItems);
+  const [classData, setClassData] = useState(initialClassData);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeDragItem, setActiveDragItem] = useState<Active | null>(null);
+  const [selectedTermNumber, setSelectedTermNumber] = useState<number | null>(terms[0]?.termNumber ?? null);
 
-  // Debug log for initial data
-  useEffect(() => {
-    console.log('Initial plan items:', initialPlanItems.map(item => ({
-      ...item,
-      weekStartDate: new Date(item.weekStartDate).toISOString().split('T')[0]
-    })));
-  }, [initialPlanItems]);
-
-  // Update planItems if initialPlanItems changes
   useEffect(() => {
     setPlanItems(initialPlanItems);
-  }, [initialPlanItems]);
+    setClassData(initialClassData);
+    if (!terms.some(t => t.termNumber === selectedTermNumber)) {
+        setSelectedTermNumber(terms[0]?.termNumber ?? null);
+    }
+  }, [initialPlanItems, initialClassData, terms, selectedTermNumber]);
 
   const selectedTerm = useMemo(() => {
     return terms.find(t => t.termNumber === selectedTermNumber);
   }, [selectedTermNumber, terms]);
 
-  // Updated formatDate helper (ensure consistency)
   const formatDate = (date: Date | string): string => {
       try {
           const d = new Date(date);
@@ -250,19 +251,10 @@ export default function PlanningBoardClient({
   }, [searchTerm, availableContentGroups]);
 
   const handleTermChange = (value: string) => {
-    const termNum = parseInt(value, 10);
-    setSelectedTermNumber(isNaN(termNum) ? null : termNum);
+    setSelectedTermNumber(parseInt(value, 10) || null);
   };
 
-  // DND Drag End Handler
-  const sensors = useSensors(
-    useSensor(PointerSensor, { // Basic pointer sensor
-      activationConstraint: {
-        distance: 8, // Require 8px movement before drag starts
-      },
-    })
-    // Add KeyboardSensor if needed for accessibility
-  );
+  const sensors = useSensors(useSensor(PointerSensor));
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveDragItem(event.active);
@@ -271,102 +263,122 @@ export default function PlanningBoardClient({
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveDragItem(null);
     const { active, over } = event;
+
     if (!over) return;
 
     const activeType = active.data.current?.type;
     const overType = over.data.current?.type;
+    const overWeekStartDate = over.data.current?.weekStartDate as Date | undefined;
 
-    // --- Logic for Adding Item ---
-    if (activeType === 'contentGroup' && overType === 'weekColumn') {
-      const contentGroupId = active.data.current?.contentGroupId;
-      const weekStartDate = over.data.current?.weekStartDate;
-
-      if (contentGroupId && weekStartDate instanceof Date) {
-        const tempId = `optimistic-${Date.now()}`;
-        const newItem: ClassCurriculumPlanItem = {
-          id: tempId as any,
-          classId: classData.id,
-          contentGroupId: contentGroupId,
-          weekStartDate: weekStartDate,
-          durationWeeks: 1,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-
-        // Debug log
-        console.log('Adding new item (client-side object):', newItem);
-        console.log('Sending to server action with date:', formatDate(weekStartDate)); // Log the formatted date being sent
-        
-        setPlanItems(prev => [...prev, newItem]);
-
-        addPlanItem({ 
-            classId: currentClassId, 
-            contentGroupId, 
-            weekStartDate: formatDate(weekStartDate) // Format to YYYY-MM-DD string
-        })
-          .then((result: ActionResult) => {
-            if (result.error) {
-              toast.error(`Failed to add plan item: ${result.error}`);
-              setPlanItems(prev => prev.filter(item => String(item.id) !== tempId));
-            } else if (result.success && result.newItem) {
-              toast.success('Item added to plan!');
-              console.log('Server returned new item:', result.newItem);
-              setPlanItems(prev => prev.map(item => 
-                String(item.id) === tempId ? result.newItem! : item
-              ));
-            } else {
-              setPlanItems(prev => prev.filter(item => String(item.id) !== tempId));
-            }
-          });
-      }
+    if (!currentClassId) {
+        toast.error("Cannot modify plan: Class ID is missing.");
+        return;
     }
-    // --- Logic for Moving Item ---
-    else if (activeType === 'planItem' && overType === 'weekColumn') {
-      const planItemId = active.data.current?.planItemId;
-      const currentWeek = active.data.current?.currentWeekStartDate;
-      const newWeekStartDate = over.data.current?.weekStartDate;
 
-      if (planItemId && newWeekStartDate instanceof Date) {
+    if (activeType === 'contentGroup' && overType === 'weekColumn' && overWeekStartDate) {
+        const contentGroupId = active.data.current?.contentGroupId as number;
+        const weekStartDateString = formatDate(overWeekStartDate);
+
+        // Optimistic Update: Add a temporary item
+        const tempId = `optimistic-${Date.now()}`;
+        const optimisticItem: ClassCurriculumPlanItem = {
+            id: tempId as any, // Temporary ID
+            classId: currentClassId, 
+            contentGroupId,
+            weekStartDate: overWeekStartDate,
+            durationWeeks: 1, // Add default duration
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        };
+        setPlanItems(prev => [...prev, optimisticItem]);
+
+        // Call Server Action to add the item
+        addPlanItem({
+            classId: currentClassId, // Use derived classId
+            contentGroupId,
+            weekStartDate: weekStartDateString, 
+            // durationWeeks is handled by default in action
+        }).then(result => {
+            if (result.error) {
+                toast.error(`Failed to add item: ${result.error}`);
+                // Revert optimistic update - compare item.id as string
+                setPlanItems(prev => prev.filter(item => String(item.id) !== tempId));
+            } else if (result.success && result.newItem) { 
+                toast.success('Item added successfully!');
+                // Replace optimistic item - compare item.id as string
+                setPlanItems(prev => prev.map(item => 
+                    String(item.id) === tempId ? result.newItem! : item 
+                ));
+            } else {
+                 toast.warning('Failed to add item, please try again.');
+                 // Revert optimistic update - compare item.id as string
+                 setPlanItems(prev => prev.filter(item => String(item.id) !== tempId));
+            }
+        }).catch(err => {
+             console.error("Error calling addPlanItem:", err);
+             toast.error('An unexpected error occurred.');
+             // Revert optimistic update - compare item.id as string
+             setPlanItems(prev => prev.filter(item => String(item.id) !== tempId));
+        });
+    }
+
+    if (activeType === 'planItem' && overType === 'weekColumn' && overWeekStartDate) {
+        const planItemId = active.data.current?.planItemId as number;
+        const originalWeekStartDate = active.data.current?.currentWeekStartDate as Date;
+        const newWeekStartDateString = formatDate(overWeekStartDate);
+        const originalWeekString = formatDate(originalWeekStartDate);
+
+        if (newWeekStartDateString === originalWeekString) return;
+
         const originalItems = [...planItems];
-        
-        // Debug log
-        console.log('Moving item:', { planItemId, from: currentWeek, to: newWeekStartDate });
-        
-        setPlanItems(prev => prev.map(item =>
-          item.id === planItemId ? { ...item, weekStartDate: newWeekStartDate } : item
+        setPlanItems(prev => prev.map(item => 
+            item.id === planItemId ? { ...item, weekStartDate: overWeekStartDate } : item
         ));
 
-        updatePlanItem({ planItemId, weekStartDate: newWeekStartDate })
-          .then((result: ActionResult) => {
+        updatePlanItem({ 
+            planItemId,
+            classId: currentClassId,
+            newWeekStartDate: newWeekStartDateString,
+        }).then(result => {
             if (result.error) {
-              toast.error(`Failed to move plan item: ${result.error}`);
-              setPlanItems(originalItems);
+                toast.error(`Failed to move item: ${result.error}`);
+                setPlanItems(originalItems);
             } else if (result.success) {
-              toast.success('Item moved!');
+                toast.success('Item moved successfully!');
+            } else {
+                toast.warning('Failed to move item, please try again.');
+                setPlanItems(originalItems);
             }
-          });
-      }
+        }).catch(err => {
+             console.error("Error calling updatePlanItem:", err);
+             toast.error('An unexpected error occurred.');
+             setPlanItems(originalItems);
+        });
     }
   };
 
-  // Create a map for quick lookup of content group names
   const contentGroupMap = useMemo(() => {
     return new Map(availableContentGroups.map(cg => [cg.contentGroupId, cg.contentGroupName]));
   }, [availableContentGroups]);
 
+  if (!currentClassId) {
+      return (
+          <div className="flex items-center justify-center h-full">
+              <p className="text-muted-foreground">Please select a class first.</p>
+          </div>
+      );
+  }
+
   return (
-    // Wrap in DndContext
     <DndContext
-        sensors={sensors} // Add sensors
+        sensors={sensors}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
-        // onDragCancel={handleDragCancel} // Optional: Clear active item on cancel
     >
       <div className="flex flex-col h-full"> 
-        {/* Header: Class Name, Term Selector */}
         <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
           <h1 className="text-xl font-semibold">
-            Planning: {classData.name} ({classData.calendarYear})
+            Planning: {classData?.name ?? 'Loading...'} ({classData?.calendarYear})
           </h1>
           <Select
             onValueChange={handleTermChange}
@@ -392,92 +404,60 @@ export default function PlanningBoardClient({
           </Select>
         </div>
 
-        {selectedTerm ? (
-          <div className="flex flex-1 min-h-0 overflow-hidden">
-            {/* Left Panel */}
-            <div className="w-1/5 max-w-[240px] flex-shrink-0 border-r flex flex-col min-h-0">
-              <div className="p-2 space-y-2 flex-shrink-0">
-                <h2 className="text-lg font-medium">Available Content</h2>
-                <Input
-                  placeholder="Search content..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full"
-                />
-              </div>
-              <ScrollArea className="flex-1 min-h-0">
-                <div className="space-y-2 p-2">
-                  {filteredContentGroups.map((cg) => (
-                    <DraggableContentGroup key={cg.contentGroupId} cg={cg} />
-                  ))}
-                </div>
-                <ScrollBar orientation="vertical" />
-              </ScrollArea>
+        <div className="flex flex-1 overflow-hidden">
+          <aside className="w-64 border-r p-2 flex flex-col">
+            <div className="p-2 space-y-2 flex-shrink-0">
+              <h2 className="text-lg font-medium">Available Content</h2>
+              <Input
+                placeholder="Search content..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full"
+              />
             </div>
-
-            {/* Right Panel */}
-            <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-              <ScrollArea className="flex-1" type="always">
-                <div className="flex space-x-2 p-2 min-w-fit">
-                  {weeksInSelectedTerm.map((weekStartDate) => {
-                    // Updated Filtering Logic using formatDate
-                    const weekDateString = formatDate(weekStartDate);
-                    const itemsInWeek = planItems.filter(item => {
-                      const itemDateString = formatDate(item.weekStartDate);
-                      const matches = itemDateString === weekDateString;
-                       // Keep console log for debugging if needed
-                       console.log('Week comparison (Planning):', {
-                           weekString: weekDateString,
-                           itemWeekString: itemDateString,
-                           itemId: item.id,
-                           matches
-                       });
-                      return matches;
-                    });
-
-                    return (
-                      <DroppableWeekColumn key={weekDateString} weekStartDate={weekStartDate}>
-                        {itemsInWeek.map((item) => (
-                          <DraggablePlanItem
-                            key={item.id}
-                            item={item}
-                            contentGroupName={contentGroupMap.get(item.contentGroupId)}
-                          />
-                        ))}
-                        {/* Placeholder if column is empty? */}
-                         {itemsInWeek.length === 0 && (
-                           <div className="text-center text-xs text-muted-foreground pt-4">Drop here</div>
-                         )}
-                      </DroppableWeekColumn>
-                    );
-                  })}
+            <ScrollArea className="flex-grow mt-2">
+                <div className="space-y-1">
+                   {filteredContentGroups.map(cg => (
+                      <DraggableContentGroup key={cg.contentGroupId} cg={cg} />
+                   ))}
                 </div>
-                <ScrollBar orientation="horizontal" />
-              </ScrollArea>
+               <ScrollBar orientation="vertical" />
+            </ScrollArea>
+          </aside>
+
+          <ScrollArea className="flex-1">
+            <div className="flex space-x-2 p-2 h-full min-h-full">
+               {weeksInSelectedTerm.map(week => (
+                 <DroppableWeekColumn key={week.toISOString()} weekStartDate={week}>
+                   {planItems
+                     .filter(item => formatDate(item.weekStartDate) === formatDate(week))
+                     .map(item => (
+                       <DraggablePlanItem 
+                         key={item.id} 
+                         item={item} 
+                         contentGroupName={contentGroupMap.get(item.contentGroupId)} 
+                       />
+                     ))}
+                 </DroppableWeekColumn>
+               ))}
             </div>
-          </div>
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-muted-foreground">Please define term dates in the settings page or select a term to start planning.</p>
-          </div>
-        )}
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
+        </div>
+
+         <DragOverlay>
+           {activeDragItem?.data.current?.type === 'contentGroup' && (
+             <DraggableContentGroup cg={activeDragItem.data.current.data} isOverlay />
+           )}
+           {activeDragItem?.data.current?.type === 'planItem' && (
+             <DraggablePlanItem 
+               item={activeDragItem.data.current.data}
+               contentGroupName={contentGroupMap.get(activeDragItem.data.current.contentGroupId)}
+               isOverlay 
+             />
+           )}
+         </DragOverlay>
       </div>
-
-      {/* Drag Overlay Implementation */}
-      <DragOverlay dropAnimation={null}> {/* Basic overlay, customize animation if needed */} 
-        {activeDragItem ? (
-            activeDragItem.data.current?.type === 'contentGroup' ? (
-                <DraggableContentGroup cg={activeDragItem.data.current.data} isOverlay />
-            ) : activeDragItem.data.current?.type === 'planItem' ? (
-                <DraggablePlanItem
-                    item={activeDragItem.data.current.data}
-                    contentGroupName={contentGroupMap.get(activeDragItem.data.current.contentGroupId)}
-                    isOverlay
-                 />
-            ) : null
-        ) : null}
-      </DragOverlay>
-
     </DndContext>
   );
 } 
