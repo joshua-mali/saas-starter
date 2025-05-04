@@ -1,7 +1,6 @@
 'use client'
 
 import { Input } from '@/components/ui/input'
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import {
   Select,
   SelectContent,
@@ -108,7 +107,7 @@ function DraggableContentGroup({ cg, isOverlay }: DraggableContentGroupProps) {
       style={style}
       {...listeners}
       {...attributes}
-      className={cn("cursor-grab rounded border bg-card p-2 text-sm shadow-sm", isOverlay && "shadow-lg")}
+      className={cn("cursor-grab rounded border bg-card p-2 text-sm shadow-sm mb-2", isOverlay && "shadow-lg")}
     >
       <p className="font-semibold">{cg.contentGroupName}</p>
       <p className="text-xs text-muted-foreground">
@@ -151,7 +150,7 @@ function DraggablePlanItem({ item, contentGroupName, isOverlay }: DraggablePlanI
       style={style}
       {...listeners}
       {...attributes}
-      className={cn("cursor-grab rounded border bg-card p-2 text-sm shadow", isOverlay && "shadow-lg")}
+      className={cn("cursor-grab rounded border bg-card p-2 text-sm shadow mb-2", isOverlay && "shadow-lg")}
     >
       <p>{contentGroupName || `Content Group ${item.contentGroupId}`} (ID: {item.id})</p>
     </div>
@@ -172,17 +171,16 @@ function DroppableWeekColumn({ weekStartDate, children }: DroppableWeekColumnPro
     <div
       ref={setNodeRef}
       className={cn(
-        "w-48 flex-shrink-0 rounded border p-2 flex flex-col", 
+        "w-48 flex-shrink-0 rounded border p-2 flex flex-col h-full", 
         isOver ? "bg-primary/10 border-primary" : "bg-muted/40"
       )}
     >
       <h3 className="mb-2 text-center font-medium flex-shrink-0">Week of {formattedDate}</h3>
-      <ScrollArea className="flex-grow">
-           <div className="space-y-1 h-full min-h-full"> 
-              {children}
-           </div>
-           <ScrollBar orientation="vertical" /> 
-       </ScrollArea>
+      <div className="flex-grow overflow-y-auto">
+        <div className="space-y-1"> 
+          {children}
+        </div>
+      </div>
     </div>
   );
 }
@@ -405,7 +403,8 @@ export default function PlanningBoardClient({
         </div>
 
         <div className="flex flex-1 overflow-hidden">
-          <aside className="w-64 border-r p-2 flex flex-col">
+          {/* Left sidebar - Content groups */}
+          <aside className="w-64 border-r p-2 flex flex-col h-full flex-shrink-0">
             <div className="p-2 space-y-2 flex-shrink-0">
               <h2 className="text-lg font-medium">Available Content</h2>
               <Input
@@ -415,49 +414,51 @@ export default function PlanningBoardClient({
                 className="w-full"
               />
             </div>
-            <ScrollArea className="flex-grow mt-2">
-                <div className="space-y-1">
-                   {filteredContentGroups.map(cg => (
-                      <DraggableContentGroup key={cg.contentGroupId} cg={cg} />
-                   ))}
-                </div>
-               <ScrollBar orientation="vertical" />
-            </ScrollArea>
+            
+            {/* Content groups area - Make this scrollable */}
+            <div className="flex-grow overflow-y-auto mt-2 pr-2">
+              {filteredContentGroups.map(cg => (
+                <DraggableContentGroup key={cg.contentGroupId} cg={cg} />
+              ))}
+            </div>
           </aside>
 
-          <ScrollArea className="flex-1">
-            <div className="flex space-x-2 p-2 h-full min-h-full">
-               {weeksInSelectedTerm.map(week => (
-                 <DroppableWeekColumn key={week.toISOString()} weekStartDate={week}>
-                   {planItems
-                     .filter(item => formatDate(item.weekStartDate) === formatDate(week))
-                     .map(item => (
-                       <DraggablePlanItem 
-                         key={item.id} 
-                         item={item} 
-                         contentGroupName={contentGroupMap.get(item.contentGroupId)} 
-                       />
-                     ))}
-                 </DroppableWeekColumn>
-               ))}
+          {/* Main content area - Week columns */}
+          <div className="flex-1 overflow-hidden flex flex-col">
+            {/* Make this scrollable horizontally */}
+            <div className="flex-1 overflow-x-auto">
+              <div className="flex flex-nowrap space-x-2 p-2 h-full min-h-full">
+                {weeksInSelectedTerm.map(week => (
+                  <DroppableWeekColumn key={week.toISOString()} weekStartDate={week}>
+                    {planItems
+                      .filter(item => formatDate(item.weekStartDate) === formatDate(week))
+                      .map(item => (
+                        <DraggablePlanItem 
+                          key={item.id} 
+                          item={item} 
+                          contentGroupName={contentGroupMap.get(item.contentGroupId)} 
+                        />
+                      ))}
+                  </DroppableWeekColumn>
+                ))}
+              </div>
             </div>
-            <ScrollBar orientation="horizontal" />
-          </ScrollArea>
+          </div>
         </div>
 
-         <DragOverlay>
-           {activeDragItem?.data.current?.type === 'contentGroup' && (
-             <DraggableContentGroup cg={activeDragItem.data.current.data} isOverlay />
-           )}
-           {activeDragItem?.data.current?.type === 'planItem' && (
-             <DraggablePlanItem 
-               item={activeDragItem.data.current.data}
-               contentGroupName={contentGroupMap.get(activeDragItem.data.current.contentGroupId)}
-               isOverlay 
-             />
-           )}
-         </DragOverlay>
+        <DragOverlay>
+          {activeDragItem?.data.current?.type === 'contentGroup' && (
+            <DraggableContentGroup cg={activeDragItem.data.current.data} isOverlay />
+          )}
+          {activeDragItem?.data.current?.type === 'planItem' && (
+            <DraggablePlanItem 
+              item={activeDragItem.data.current.data}
+              contentGroupName={contentGroupMap.get(activeDragItem.data.current.contentGroupId)}
+              isOverlay 
+            />
+          )}
+        </DragOverlay>
       </div>
     </DndContext>
   );
-} 
+}
