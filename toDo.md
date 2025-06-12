@@ -42,15 +42,25 @@
     *   Modify backend logic to fetch pending invites for the current team/account.
     *   Update the team members/settings section (`app/(dashboard)/dashboard/team-settings.tsx`?) to display pending invites.
     *   Implement functionality (action and UI button) to cancel a pending invite.
+11. **Quick Notes Function on Home Page:** *(NEW)*
+    *   Add quick notes functionality to the home/dashboard page for class-specific notes.
+    *   Update database schema: Create a `class_notes` table with columns for `id`, `class_id`, `user_id`, `content`, `created_at`, `updated_at`.
+    *   Implement UI component on the home page with textarea for adding/editing notes specific to the selected class.
+    *   Add backend actions for saving, updating, and retrieving class notes.
+    *   **Future Enhancement**: Implement "@student_name" tagging system:
+        *   Parse note content for "@student_name" mentions during save.
+        *   Create `student_tagged_notes` table linking notes to specific students.
+        *   Add tagged notes display to individual student profiles.
+        *   Implement autocomplete for student names when typing "@" in notes.
 
 ## P3: UX Improvements & Content Updates
 
-11. **Planning Page Allocated Items:**
+12. **Planning Page Allocated Items:**
     *   Modify the data fetching logic (`app/(dashboard)/dashboard/planning/page.tsx` or `actions.ts`) or client-side filtering (`app/(dashboard)/dashboard/planning/client.tsx`) to separate allocated content groups.
     *   Display allocated groups at the bottom of the list with a visual divider.
-12. **Grading Page Week Display Format:**
+13. **Grading Page Week Display Format:**
     *   Update the logic generating the week dropdown options in `app/(dashboard)/dashboard/grading/client.tsx`.
     *   Format options like "Week X Term Y (Start Date)".
-13. **Home Page Content Update:**
+14. **Home Page Content Update:**
     *   Replace boilerplate text and images on the main landing page (`app/(dashboard)/page.tsx`).
     *   Incorporate user-provided images and app-specific information. 
