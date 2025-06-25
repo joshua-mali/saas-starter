@@ -1,6 +1,6 @@
 import { getTeacherClasses, getTeamClasses, getUserTeam } from '@/app/actions/get-classes';
 import { createClient } from '@/lib/supabase/server';
-import { CircleIcon } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { ConditionalClassSelector } from './dashboard/conditional-class-selector';
@@ -32,7 +32,13 @@ async function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
         <div className="flex items-center space-x-4">
           <Link href="/" className="flex items-center">
-            <CircleIcon className="h-6 w-6 text-orange-500" />
+            <Image 
+              src="/MALI Symbol (Burnt Orange).svg" 
+              alt="MALI-Ed Logo" 
+              width={24} 
+              height={24} 
+              className="h-6 w-6"
+            />
             <span className="ml-2 text-xl font-semibold text-gray-900">MALI-Ed</span>
           </Link>
           {(user && allTeamClasses.length > 0) && (
