@@ -246,6 +246,19 @@ type RankedGroup = {
     averageGrade: number | null; // Keep average for clarity if needed
 };
 
+// --- Type Definition for Grade Comments ---
+type GradeComment = {
+    id: number; // assessment id
+    contentType: 'contentGroup' | 'contentPoint';
+    contentId: number;
+    contentName: string;
+    contentDescription?: string | null; // For content points
+    gradeName: string | null;
+    comment: string;
+    assessmentDate: Date;
+    gradeScaleId: number | null;
+};
+
 // --- Helper to Extract and Rank Content Groups ---
 function extractTopBottomGroups(processedHierarchy: Record<number, ProcessedNode>): {
     topGroups: RankedGroup[];
@@ -290,6 +303,79 @@ function extractTopBottomGroups(processedHierarchy: Record<number, ProcessedNode
         : []; // Avoid duplicating if less than 7 groups total
 
     return { topGroups, bottomGroups };
+}
+
+// --- Helper to Extract Grade Comments ---
+function extractGradeComments(
+    hierarchyData: FullHierarchyItem[], 
+    assessmentsData: StudentAssessment[], 
+    gradeScalesData: GradeScale[]
+): GradeComment[] {
+    const gradeScaleMap: Map<number, { name: string; numericValue: number }> = new Map();
+    for (const scale of gradeScalesData) {
+        gradeScaleMap.set(scale.id, { name: scale.name, numericValue: scale.numericValue });
+    }
+
+    // Create lookup maps for content groups and points
+    const contentGroupsMap: Map<number, { name: string }> = new Map();
+    const contentPointsMap: Map<number, { name: string; description: string | null }> = new Map();
+
+    for (const item of hierarchyData) {
+        if (item.contentGroupId && item.contentGroupName) {
+            contentGroupsMap.set(item.contentGroupId, { name: item.contentGroupName });
+        }
+        if (item.contentPointId && item.contentPointName) {
+            contentPointsMap.set(item.contentPointId, { 
+                name: item.contentPointName,
+                description: item.contentPointDescription 
+            });
+        }
+    }
+
+    // Extract comments from assessments
+    const comments: GradeComment[] = [];
+    
+    for (const assessment of assessmentsData) {
+        if (assessment.notes && assessment.notes.trim() !== '') {
+            const gradeInfo = assessment.gradeScaleId ? gradeScaleMap.get(assessment.gradeScaleId) : null;
+            
+            if (assessment.contentPointId) {
+                // Comment on a content point
+                const contentPoint = contentPointsMap.get(assessment.contentPointId);
+                if (contentPoint) {
+                    comments.push({
+                        id: assessment.id,
+                        contentType: 'contentPoint',
+                        contentId: assessment.contentPointId,
+                        contentName: contentPoint.name,
+                        contentDescription: contentPoint.description,
+                        gradeName: gradeInfo?.name || null,
+                        comment: assessment.notes,
+                        assessmentDate: assessment.assessmentDate,
+                        gradeScaleId: assessment.gradeScaleId
+                    });
+                }
+            } else {
+                // Comment on a content group
+                const contentGroup = contentGroupsMap.get(assessment.contentGroupId);
+                if (contentGroup) {
+                    comments.push({
+                        id: assessment.id,
+                        contentType: 'contentGroup',
+                        contentId: assessment.contentGroupId,
+                        contentName: contentGroup.name,
+                        gradeName: gradeInfo?.name || null,
+                        comment: assessment.notes,
+                        assessmentDate: assessment.assessmentDate,
+                        gradeScaleId: assessment.gradeScaleId
+                    });
+                }
+            }
+        }
+    }
+
+    // Sort comments by date (most recent first)
+    return comments.sort((a, b) => b.assessmentDate.getTime() - a.assessmentDate.getTime());
 }
 
 interface StudentOverviewPageProps {
@@ -372,6 +458,7 @@ export default async function StudentOverviewPage({
     // --- Process Data ---
     const processedGrades = processStudentGrades(hierarchyData, assessmentsData, gradeScalesData);
     const { topGroups, bottomGroups } = extractTopBottomGroups(processedGrades);
+    const gradeComments = extractGradeComments(hierarchyData, assessmentsData, gradeScalesData);
 
     // --- Pass to Client Component --- 
     return (
@@ -389,6 +476,7 @@ export default async function StudentOverviewPage({
                 structuredGrades={processedGrades} 
                 topContentGroups={topGroups}
                 bottomContentGroups={bottomGroups}
+                gradeComments={gradeComments}
              />
         </div>
     );

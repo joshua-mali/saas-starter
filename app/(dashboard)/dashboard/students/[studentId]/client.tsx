@@ -31,12 +31,26 @@ type RankedGroup = {
     averageGrade: number | null;
 };
 
+// Type for Grade Comments (Should match server definition)
+type GradeComment = {
+    id: number; // assessment id
+    contentType: 'contentGroup' | 'contentPoint';
+    contentId: number;
+    contentName: string;
+    contentDescription?: string | null; // For content points
+    gradeName: string | null;
+    comment: string;
+    assessmentDate: Date;
+    gradeScaleId: number | null;
+};
+
 interface StudentOverviewClientProps {
     student: Student;
     classData: Class & { stage: Stage | null };
     structuredGrades: Record<number, ProcessedNode>; // Map of Subject IDs to ProcessedNodes
     topContentGroups: RankedGroup[]; // Add top groups prop
     bottomContentGroups: RankedGroup[]; // Add bottom groups prop
+    gradeComments: GradeComment[]; // Add grade comments prop
 }
 
 // Helper to format the average grade for display
@@ -118,8 +132,18 @@ export default function StudentOverviewClient({
     classData,
     structuredGrades,
     topContentGroups,
-    bottomContentGroups
+    bottomContentGroups,
+    gradeComments
 }: StudentOverviewClientProps) {
+
+    // Helper function to format dates for display
+    const formatDisplayDate = (date: Date): string => {
+        return new Intl.DateTimeFormat('en-AU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+        }).format(new Date(date));
+    };
 
     return (
         <div className="flex flex-col h-[calc(100vh-200px)]">
@@ -177,13 +201,54 @@ export default function StudentOverviewClient({
                     </CardContent>
                 </Card>
 
-                 <Card>
+                <Card>
                     <CardHeader>
-                        <CardTitle className="text-base">Comments</CardTitle>
+                        <CardTitle className="text-base">Grade Comments</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-muted-foreground text-sm">Teacher comments will appear here.</p>
-                        {/* TODO: Add comment input and display list later */}
+                        {gradeComments.length > 0 ? (
+                            <div className="space-y-3 max-h-96 overflow-y-auto">
+                                {gradeComments.map(comment => (
+                                    <div key={comment.id} className="border-l-2 border-blue-200 pl-3 pb-2">
+                                        <div className="flex items-start justify-between mb-1">
+                                            <div className="flex-1 min-w-0">
+                                                <h5 className="font-medium text-sm truncate" title={comment.contentName}>
+                                                    {comment.contentName}
+                                                </h5>
+                                                {comment.contentDescription && (
+                                                    <p className="text-xs text-muted-foreground mt-1">
+                                                        {comment.contentDescription}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div className="flex flex-col items-end ml-2 flex-shrink-0">
+                                                {comment.gradeName && (
+                                                    <span className="text-xs font-semibold text-blue-600 mb-1">
+                                                        {comment.gradeName}
+                                                    </span>
+                                                )}
+                                                <span className="text-xs text-muted-foreground">
+                                                    {formatDisplayDate(comment.assessmentDate)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded text-left whitespace-pre-wrap">
+                                            {comment.comment}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            {comment.contentType === 'contentPoint' ? 'Content Point' : 'Content Group'}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-muted-foreground text-sm">No grade comments found for this student.</p>
+                        )}
+                        <div className="mt-4 pt-3 border-t">
+                            <p className="text-xs text-muted-foreground">
+                                Note: These are comments made when grades were recorded. General teacher comments will be available separately in the future.
+                            </p>
+                        </div>
                     </CardContent>
                 </Card>
             </div>
