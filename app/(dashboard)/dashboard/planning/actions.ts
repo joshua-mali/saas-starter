@@ -9,7 +9,7 @@ import { z } from 'zod'
 
 // --- Helper: Check Authorization --- 
 // Placeholder - implement proper check to ensure user teaches the class
-async function canUserModifyClassPlan(userId: string, classId: number): Promise<boolean> {
+async function canUserModifyClassPlan(userId: string, classId: string): Promise<boolean> {
   // TODO: Query classTeachers table to see if userId is linked to classId
   console.warn(`Authorization check skipped for user ${userId} and class ${classId}`);
   return true; 
@@ -18,20 +18,21 @@ async function canUserModifyClassPlan(userId: string, classId: number): Promise<
 // --- Action Schemas --- 
 
 const addPlanItemSchema = z.object({
-  classId: z.coerce.number().int().positive(),
+  classId: z.string().uuid(), // UUID string for class ID
   contentGroupId: z.coerce.number().int().positive(),
   weekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Week start date must be in YYYY-MM-DD format" }),
   durationWeeks: z.coerce.number().int().min(1).optional().default(1),
 })
 
 const updatePlanItemSchema = z.object({
-  planItemId: z.coerce.number().int().positive(),
-  weekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Week start date must be in YYYY-MM-DD format" }),
+  planItemId: z.string().uuid(), // UUID string for plan item ID
+  classId: z.string().uuid(), // Add classId for consistency 
+  newWeekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Week start date must be in YYYY-MM-DD format" }),
   durationWeeks: z.coerce.number().int().min(1).optional(), // Optional for update
 })
 
 const deletePlanItemSchema = z.object({
-    planItemId: z.coerce.number().int().positive(),
+    planItemId: z.string().uuid(), // UUID string for plan item ID
 })
 
 // --- Action Result Type --- 
@@ -95,7 +96,7 @@ export async function updatePlanItem(
     return { error: 'Invalid data for updating plan item.' }
   }
 
-  const { planItemId, weekStartDate, durationWeeks } = validatedFields.data
+  const { planItemId, classId, newWeekStartDate, durationWeeks } = validatedFields.data
 
   // Fetch original item to check ownership/classId for auth
   const [originalItem] = await db.select({ classId: classCurriculumPlan.classId })
@@ -105,12 +106,12 @@ export async function updatePlanItem(
   if (!originalItem) return { error: 'Plan item not found.' };
 
   // Authorization check
-  const authorized = await canUserModifyClassPlan(user.id, originalItem.classId);
+  const authorized = await canUserModifyClassPlan(user.id, classId);
   if (!authorized) return { error: 'User not authorized to modify this item.' };
 
   try {
     // Convert the YYYY-MM-DD string to a Date object, treating it as UTC
-    const dateObject = new Date(weekStartDate + 'T00:00:00Z');
+    const dateObject = new Date(newWeekStartDate + 'T00:00:00Z');
 
     await db.update(classCurriculumPlan)
             .set({

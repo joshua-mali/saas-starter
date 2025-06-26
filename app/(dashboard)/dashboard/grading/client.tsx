@@ -51,7 +51,7 @@ interface GradingTableClientProps {
     currentWeek: Date;
     allWeeks: Date[];
     // Prop for initial ID, can be null if URL is missing it initially
-    currentClassId: number | null; 
+    currentClassId: string | null; 
 }
 
 // Helper function to format dates consistently to YYYY-MM-DD
@@ -138,8 +138,8 @@ interface GradeCellProps {
     hasNotes: string | null | undefined;
     gradeScales: GradeScale[];
     isPending: boolean;
-    onGradeChange: (studentEnrollmentId: number, classCurriculumPlanId: number, contentGroupId: number, newGradeScaleId: number | null) => void;
-    onDropdownClose: (studentEnrollmentId: number, classCurriculumPlanId: number, contentGroupId: number) => void;
+    onGradeChange: (studentEnrollmentId: string, classCurriculumPlanId: string, contentGroupId: number, newGradeScaleId: number | null) => void;
+    onDropdownClose: (studentEnrollmentId: string, classCurriculumPlanId: string, contentGroupId: number) => void;
     onNotesChange: (cellKey: string, value: string) => void;
     cellNotes: Record<string, string>;
 }
@@ -238,7 +238,7 @@ export default function GradingTableClient({
 
     // Derive classId primarily from URL, fall back to initial prop
     const classIdFromUrl = searchParams.get('classId');
-    const currentClassId = classIdFromUrl ? parseInt(classIdFromUrl, 10) : initialClassId;
+    const currentClassId = classIdFromUrl ? classIdFromUrl : initialClassId;
 
     // Derive week primarily from URL, fall back to initial prop
     const weekFromUrl = searchParams.get('week'); // Week is expected as YYYY-MM-DD string
@@ -343,8 +343,8 @@ export default function GradingTableClient({
 
     // --- Grade Change Handler ---
     const handleGradeChange = useCallback((
-        studentEnrollmentId: number,
-        classCurriculumPlanId: number,
+        studentEnrollmentId: string,
+        classCurriculumPlanId: string,
         contentGroupId: number,
         newGradeScaleId: number | null
     ) => {
@@ -475,8 +475,8 @@ export default function GradingTableClient({
 
     // --- Handle dropdown close - save notes if they changed ---
     const handleDropdownClose = useCallback((
-        studentEnrollmentId: number,
-        classCurriculumPlanId: number,
+        studentEnrollmentId: string,
+        classCurriculumPlanId: string,
         contentGroupId: number
     ) => {
         const cellKey = `${studentEnrollmentId}-${classCurriculumPlanId}`;

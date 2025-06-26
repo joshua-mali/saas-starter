@@ -1,15 +1,15 @@
 import { relations } from 'drizzle-orm';
 import {
-  boolean,
-  date,
-  integer,
-  pgTable,
-  serial,
-  text,
-  timestamp,
-  uniqueIndex,
-  uuid,
-  varchar
+    boolean,
+    date,
+    integer,
+    pgTable,
+    serial,
+    text,
+    timestamp,
+    uniqueIndex,
+    uuid,
+    varchar
 } from 'drizzle-orm/pg-core';
 
 const authSchema = 'auth';
@@ -136,7 +136,8 @@ export const focusGroups = pgTable('focus_groups', {
 
 export const contentGroups = pgTable('content_groups', {
   id: serial('id').primaryKey(),
-  focusGroupId: integer('focus_group_id').notNull().references(() => focusGroups.id, { onDelete: 'cascade' }),
+  focusGroupId: integer('focus_group_id').references(() => focusGroups.id, { onDelete: 'cascade' }),
+  focusAreaId: integer('focus_area_id').references(() => focusAreas.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -154,7 +155,7 @@ export const contentPoints = pgTable('content_points', {
 });
 
 export const classes = pgTable('classes', {
-  id: serial('id').primaryKey(),
+  id: uuid('id').primaryKey().defaultRandom(),
   teamId: integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
   calendarYear: integer('calendar_year').notNull(),
   stageId: integer('stage_id').notNull().references(() => stages.id, { onDelete: 'cascade' }),
@@ -165,7 +166,7 @@ export const classes = pgTable('classes', {
 });
 
 export const students = pgTable('students', {
-  id: serial('id').primaryKey(),
+  id: uuid('id').primaryKey().defaultRandom(),
   teamId: integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
   firstName: varchar('first_name', { length: 100 }).notNull(),
   lastName: varchar('last_name', { length: 100 }).notNull(),
@@ -177,8 +178,8 @@ export const students = pgTable('students', {
 });
 
 export const classTeachers = pgTable('class_teachers', {
-  id: serial('id').primaryKey(),
-  classId: integer('class_id').notNull().references(() => classes.id, { onDelete: 'cascade' }),
+  id: uuid('id').primaryKey().defaultRandom(),
+  classId: uuid('class_id').notNull().references(() => classes.id, { onDelete: 'cascade' }),
   teacherId: uuid('teacher_id').notNull().references(() => authUsers.id, { onDelete: 'cascade' }),
   isPrimary: boolean('is_primary').default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -186,9 +187,9 @@ export const classTeachers = pgTable('class_teachers', {
 });
 
 export const studentEnrollments = pgTable('student_enrollments', {
-  id: serial('id').primaryKey(),
-  studentId: integer('student_id').notNull().references(() => students.id, { onDelete: 'cascade' }),
-  classId: integer('class_id').notNull().references(() => classes.id, { onDelete: 'cascade' }),
+  id: uuid('id').primaryKey().defaultRandom(),
+  studentId: uuid('student_id').notNull().references(() => students.id, { onDelete: 'cascade' }),
+  classId: uuid('class_id').notNull().references(() => classes.id, { onDelete: 'cascade' }),
   enrollmentDate: timestamp('enrollment_date', { mode: 'date' }).notNull().defaultNow(),
   status: varchar('status', { length: 50 }).default('active'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -196,7 +197,7 @@ export const studentEnrollments = pgTable('student_enrollments', {
 });
 
 export const terms = pgTable('terms', {
-  id: serial('id').primaryKey(),
+  id: uuid('id').primaryKey().defaultRandom(),
   teamId: integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
   calendarYear: integer('calendar_year').notNull(),
   termNumber: integer('term_number').notNull(),
@@ -215,8 +216,8 @@ export const terms = pgTable('terms', {
 });
 
 export const classCurriculumPlan = pgTable('class_curriculum_plan', {
-  id: serial('id').primaryKey(),
-  classId: integer('class_id').notNull().references(() => classes.id, { onDelete: 'cascade' }),
+  id: uuid('id').primaryKey().defaultRandom(),
+  classId: uuid('class_id').notNull().references(() => classes.id, { onDelete: 'cascade' }),
   contentGroupId: integer('content_group_id').notNull().references(() => contentGroups.id, { onDelete: 'cascade' }),
   weekStartDate: date('week_start_date', { mode: 'date' }).notNull(),
   durationWeeks: integer('duration_weeks').notNull().default(1),
@@ -225,9 +226,9 @@ export const classCurriculumPlan = pgTable('class_curriculum_plan', {
 });
 
 export const studentAssessments = pgTable('student_assessments', {
-    id: serial('id').primaryKey(),
-    studentEnrollmentId: integer('student_enrollment_id').notNull().references(() => studentEnrollments.id, { onDelete: 'cascade' }),
-    classCurriculumPlanId: integer('class_curriculum_plan_id').notNull().references(() => classCurriculumPlan.id, { onDelete: 'cascade' }),
+    id: uuid('id').primaryKey().defaultRandom(),
+    studentEnrollmentId: uuid('student_enrollment_id').notNull().references(() => studentEnrollments.id, { onDelete: 'cascade' }),
+    classCurriculumPlanId: uuid('class_curriculum_plan_id').notNull().references(() => classCurriculumPlan.id, { onDelete: 'cascade' }),
     contentGroupId: integer('content_group_id').notNull().references(() => contentGroups.id, { onDelete: 'cascade' }),
     contentPointId: integer('content_point_id').references(() => contentPoints.id, { onDelete: 'cascade' }), // Nullable for group-level grading
     gradeScaleId: integer('grade_scale_id').notNull().references(() => gradeScales.id, { onDelete: 'restrict' }), // Restrict deletion of grade scales if used
@@ -250,13 +251,13 @@ export const studentAssessments = pgTable('student_assessments', {
 
 // Teacher Comments - Two types: General notes and Student-specific comments
 export const teacherComments = pgTable('teacher_comments', {
-  id: serial('id').primaryKey(),
+  id: uuid('id').primaryKey().defaultRandom(),
   teamId: integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
   authorId: uuid('author_id').notNull().references(() => authUsers.id, { onDelete: 'cascade' }),
   commentType: varchar('comment_type', { length: 20 }).notNull(), // 'general' or 'student'
   // For general notes, these will be null:
-  studentId: integer('student_id').references(() => students.id, { onDelete: 'cascade' }),
-  classId: integer('class_id').references(() => classes.id, { onDelete: 'cascade' }),
+  studentId: uuid('student_id').references(() => students.id, { onDelete: 'cascade' }),
+  classId: uuid('class_id').references(() => classes.id, { onDelete: 'cascade' }),
   // Comment content
   title: varchar('title', { length: 255 }),
   content: text('content').notNull(),

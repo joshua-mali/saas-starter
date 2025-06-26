@@ -33,7 +33,7 @@ type RankedGroup = {
 
 // Type for Grade Comments (Should match server definition)
 type GradeComment = {
-    id: number; // assessment id
+    id: string; // assessment id
     contentType: 'contentGroup' | 'contentPoint';
     contentId: number;
     contentName: string;

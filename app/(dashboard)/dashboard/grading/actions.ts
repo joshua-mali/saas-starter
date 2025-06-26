@@ -13,7 +13,7 @@ import { z } from 'zod';
 
 // --- Helper: Authorization Check (Placeholder) ---
 // TODO: Implement proper check based on class ownership/teacher assignment
-async function canUserGradeClass(userId: string, classId: number): Promise<boolean> {
+async function canUserGradeClass(userId: string, classId: string): Promise<boolean> {
     console.warn(`Authorization check skipped for grading in class ${classId} by user ${userId}`);
     return true; // Assume authorized for now
 }
@@ -21,14 +21,14 @@ async function canUserGradeClass(userId: string, classId: number): Promise<boole
 // --- Action Schemas ---
 
 const saveAssessmentSchema = z.object({
-    classId: z.coerce.number().int().positive(), // Needed for auth and revalidation path
-    studentEnrollmentId: z.coerce.number().int().positive(),
-    classCurriculumPlanId: z.coerce.number().int().positive(),
+    classId: z.string().uuid(), // UUID string for class ID
+    studentEnrollmentId: z.string().uuid(), // UUID string for enrollment ID
+    classCurriculumPlanId: z.string().uuid(), // UUID string for plan ID  
     contentGroupId: z.coerce.number().int().positive(),
     contentPointId: z.coerce.number().int().positive().optional().nullable(),
     gradeScaleId: z.coerce.number().int().positive(),
     notes: z.string().optional().nullable(),
-    assessmentIdToUpdate: z.coerce.number().int().positive().optional().nullable(), // If updating existing
+    assessmentIdToUpdate: z.string().uuid().optional().nullable(), // UUID string for assessment ID
     weekStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // YYYY-MM-DD format
 });
 

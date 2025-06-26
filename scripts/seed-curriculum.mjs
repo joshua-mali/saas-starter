@@ -42,8 +42,8 @@ async function processRow(row) {
     const contentPointDescription = row['Content Point Description']?.trim();
   
     // Validation
-    if (!stageName || !subjectName || !outcomeName || !focusAreaName || !focusGroupName || !contentGroupName || !contentPointName) {
-      console.warn('Skipping row due to missing core data:', row);
+    if (!stageName || !subjectName || !outcomeName || !focusAreaName || !contentGroupName || !contentPointName) {
+      console.warn('Skipping row due to missing core data (required: Stage, Subject, Outcome, Focus Area, Content Group, Content Point):', row);
       return;
     }
   
@@ -144,23 +144,33 @@ async function processRow(row) {
       }
   
       // --- 7. Find or Create Content Group ---
-      const contentGroupKey = `${focusGroupId}-${contentGroupName}`;
+      const contentGroupKey = focusGroupId ? `${focusGroupId}-${contentGroupName}` : `${focusAreaId}-${contentGroupName}`;
       let contentGroupId = contentGroupCache.get(contentGroupKey);
+
       if (!contentGroupId) {
-         let [contentGroupRecord] = await db.select({ id: contentGroups.id })
-             .from(contentGroups)
-             .where(and(
+         const searchCondition = focusGroupId
+            ? and(
                  eq(contentGroups.focusGroupId, focusGroupId),
                  eq(contentGroups.name, contentGroupName)
-             ))
+              )
+            : and(
+                 eq(contentGroups.focusAreaId, focusAreaId),
+                 eq(contentGroups.name, contentGroupName)
+            );
+
+         let [contentGroupRecord] = await db.select({ id: contentGroups.id })
+             .from(contentGroups)
+             .where(searchCondition)
              .limit(1);
   
          if (!contentGroupRecord) {
-             console.log(`Creating Content Group: ${contentGroupName} (Focus Group: ${focusGroupName})`);
-             [contentGroupRecord] = await db.insert(contentGroups).values({
-                 focusGroupId: focusGroupId,
+             console.log(`Creating Content Group: ${contentGroupName} (Parent: ${focusGroupName || focusAreaName})`);
+             const values = {
+                 focusGroupId: focusGroupId || null,
+                 focusAreaId: focusGroupId ? null : focusAreaId,
                  name: contentGroupName
-             }).returning({ id: contentGroups.id });
+             };
+             [contentGroupRecord] = await db.insert(contentGroups).values(values).returning({ id: contentGroups.id });
          }
          contentGroupId = contentGroupRecord.id;
          contentGroupCache.set(contentGroupKey, contentGroupId);
@@ -212,8 +222,36 @@ async function processFile(csvFilePath) {
   console.log(`Completed processing ${csvFilePath} - ${rowCount} rows processed`);
 }
 
+async function ensureSchemaReady() {
+    try {
+        await db.execute(`
+            ALTER TABLE "content_groups" ADD COLUMN IF NOT EXISTS "focus_area_id" INTEGER REFERENCES "focus_areas"("id") ON DELETE CASCADE;
+        `);
+        await db.execute(`
+            ALTER TABLE "content_groups" ALTER COLUMN "focus_group_id" DROP NOT NULL;
+        `);
+        console.log('Schema verification complete. "content_groups" table is ready.');
+    } catch (error) {
+        console.error('Error ensuring schema readiness:', error);
+        throw error;
+    }
+}
+
 async function seedDatabase() {
   console.log('Starting syllabus seeding process...\n');
+  
+  await ensureSchemaReady();
+
+  // Clear existing data to ensure a fresh seed
+  console.log('Clearing existing syllabus data...');
+  await db.delete(contentPoints);
+  await db.delete(contentGroups);
+  await db.delete(focusGroups);
+  await db.delete(focusAreas);
+  await db.delete(outcomes);
+  await db.delete(subjects);
+  await db.delete(stages);
+  console.log('Existing data cleared.');
 
   for (const csvFile of CSV_FILES) {
     const csvFilePath = path.resolve(process.cwd(), csvFile);

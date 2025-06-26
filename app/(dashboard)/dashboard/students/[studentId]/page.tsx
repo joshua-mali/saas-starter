@@ -27,7 +27,7 @@ import StudentOverviewClient from './client'; // Import the client component
 // async function checkTeacherAuthorization(classId: number, userId: string): Promise<boolean> { ... }
 
 // --- Authorization Function (Ideally move to shared utils) ---
-async function checkTeacherAuthorization(classId: number, userId: string): Promise<boolean> {
+async function checkTeacherAuthorization(classId: string, userId: string): Promise<boolean> {
     const teacherLink = await db.query.classTeachers.findFirst({
         where: and(
             eq(classTeachers.classId, classId),
@@ -40,7 +40,7 @@ async function checkTeacherAuthorization(classId: number, userId: string): Promi
 
 // --- Data Fetching Functions ---
 
-async function getStudentEnrollment(classId: number, studentId: number): Promise<(StudentEnrollment & { student: Student }) | null | undefined> {
+async function getStudentEnrollment(classId: string, studentId: string): Promise<(StudentEnrollment & { student: Student }) | null | undefined> {
     return db.query.studentEnrollments.findFirst({
         where: and(
             eq(studentEnrollments.classId, classId),
@@ -52,7 +52,7 @@ async function getStudentEnrollment(classId: number, studentId: number): Promise
     });
 }
 
-async function getClassDetails(classId: number): Promise<(Class & { stage: Stage | null }) | null | undefined> {
+async function getClassDetails(classId: string): Promise<(Class & { stage: Stage | null }) | null | undefined> {
     return db.query.classes.findFirst({
         where: eq(classes.id, classId),
         with: {
@@ -92,7 +92,7 @@ async function getFullCurriculumHierarchy(stageId: number) {
 
 type FullHierarchyItem = Awaited<ReturnType<typeof getFullCurriculumHierarchy>>[0];
 
-async function getStudentAssessmentsForEnrollment(enrollmentId: number): Promise<StudentAssessment[]> {
+async function getStudentAssessmentsForEnrollment(enrollmentId: string): Promise<StudentAssessment[]> {
     return db.select()
              .from(studentAssessments)
              .where(eq(studentAssessments.studentEnrollmentId, enrollmentId));
@@ -248,7 +248,7 @@ type RankedGroup = {
 
 // --- Type Definition for Grade Comments ---
 type GradeComment = {
-    id: number; // assessment id
+    id: string; // assessment id
     contentType: 'contentGroup' | 'contentPoint';
     contentId: number;
     contentName: string;
@@ -391,11 +391,7 @@ export default async function StudentOverviewPage({
     const searchParams = await searchParamsPromise;
     const rawClassId = Array.isArray(searchParams.classId) ? searchParams.classId[0] : searchParams.classId;
 
-    const studentId = parseInt(rawStudentId, 10);
-    if (isNaN(studentId)) {
-        console.error("Invalid studentId parameter:", rawStudentId);
-        notFound();
-    }
+    const studentId = rawStudentId; // Now expects UUID string
 
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -404,14 +400,9 @@ export default async function StudentOverviewPage({
     }
 
     // --- Get classId from searchParams --- 
-    let classId: number | null = null;
+    let classId: string | null = null;
     if (rawClassId) {
-        const parsedId = parseInt(rawClassId, 10);
-        if (!isNaN(parsedId)) {
-            classId = parsedId;
-        } else {
-            console.warn(`Invalid classId in searchParams: ${rawClassId}`);
-        }
+        classId = rawClassId; // Now expects UUID string
     }
 
     // Handle case where no valid classId is provided in searchParams
@@ -432,14 +423,14 @@ export default async function StudentOverviewPage({
     //     return <div>Error: You are not authorized to view this student's details for this class.</div>;
     // }
 
-    // --- Data Fetching (Uses validated studentId and classId) ---
-    const enrollment = await getStudentEnrollment(classId, studentId);
-    if (!enrollment) {
-        console.error(`Enrollment not found for student ${studentId} in class ${classId}`);
-        notFound(); // Student not found in this specific class
-    }
+            // --- Data Fetching (Uses validated studentId and classId) ---
+        const enrollment = await getStudentEnrollment(classId, studentId);
+        if (!enrollment) {
+            console.error(`Enrollment not found for student ${studentId} in class ${classId}`);
+            notFound(); // Student not found in this specific class
+        }
 
-    const classData = await getClassDetails(classId);
+        const classData = await getClassDetails(classId);
     if (!classData || !classData.stageId || !classData.teamId) {
         console.error(`Class data, stageId, or teamId not found for classId: ${classId}`);
         notFound();
@@ -447,7 +438,7 @@ export default async function StudentOverviewPage({
 
     const [hierarchyData, assessmentsData, gradeScalesData] = await Promise.all([
         getFullCurriculumHierarchy(classData.stageId),
-        getStudentAssessmentsForEnrollment(enrollment.id), // Use enrollment ID
+        getStudentAssessmentsForEnrollment(enrollment.id),
         getGradeScalesForTeam(classData.teamId)
     ]);
     

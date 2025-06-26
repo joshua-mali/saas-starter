@@ -74,7 +74,7 @@ function getWeeksBetween(startDate: Date, endDate: Date): Date[] {
 // --- Data Fetching Functions ---
 
 // Updated function to include authorization check
-async function checkTeacherAuthorization(classId: number, userId: string): Promise<boolean> {
+async function checkTeacherAuthorization(classId: string, userId: string): Promise<boolean> {
     const teacherLink = await db.query.classTeachers.findFirst({
         where: and(
             eq(classTeachers.classId, classId),
@@ -86,7 +86,7 @@ async function checkTeacherAuthorization(classId: number, userId: string): Promi
 }
 
 // TODO: Refactor with Planning page fetch if identical (or create shared util)
-async function getClassDetails(classId: number, userId: string): Promise<(Class & { stage: Stage | null, teamId: number }) | null> {
+async function getClassDetails(classId: string, userId: string): Promise<(Class & { stage: Stage | null, teamId: number }) | null> {
     // Authorization is checked separately now, so we just fetch the details
     const result = await db.query.classes.findFirst({
         where: eq(classes.id, classId),
@@ -100,7 +100,7 @@ async function getClassDetails(classId: number, userId: string): Promise<(Class 
 
 // OPTIMIZED: Single query to get all grading data
 async function getGradingData(
-    classId: number, 
+    classId: string, 
     teamId: number, 
     calendarYear: number, 
     weekStartDate: Date
@@ -198,11 +198,10 @@ export default async function GradingPage({ searchParams: searchParamsPromise }:
         getTeamClasses(userTeamId)
     ]);
 
-    let classId: number | null = null;
+    let classId: string | null = null;
     if (rawClassId) {
-        const parsedId = parseInt(rawClassId, 10);
-        if (!isNaN(parsedId) && allTeamClasses.some(c => c.id === parsedId)) {
-            classId = parsedId;
+        if (allTeamClasses.some(c => c.id === rawClassId)) {
+            classId = rawClassId;
         } else {
              console.warn(`Invalid or unauthorized classId requested: ${rawClassId}.`);
         }

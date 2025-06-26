@@ -2,7 +2,7 @@ import { getTeacherClasses, getTeamClasses, getUserTeam } from '@/app/actions/ge
 import { createClient } from '@/lib/supabase/server';
 import { ClassSelectorClient } from './class-selector-client'; // Client component for handling interaction
 
-export type SimpleClass = { id: number; name: string };
+export type SimpleClass = { id: string; name: string };
 
 async function ClassSelector() {
     const supabase = await createClient();

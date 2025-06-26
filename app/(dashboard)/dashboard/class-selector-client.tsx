@@ -27,14 +27,14 @@ export function ClassSelectorClient({
 
     const [selectedValue, setSelectedValue] = useState<string>(() => {
         const classIdFromUrl = searchParams.get('classId');
-        if (classIdFromUrl && allTeamClasses.some(c => c.id.toString() === classIdFromUrl)) {
+        if (classIdFromUrl && allTeamClasses.some(c => c.id === classIdFromUrl)) {
             return classIdFromUrl;
         }
         if (userTaughtClasses.length > 0) {
-            return userTaughtClasses[0].id.toString();
+            return userTaughtClasses[0].id;
         }
         if (allTeamClasses.length > 0) {
-            return allTeamClasses[0].id.toString();
+            return allTeamClasses[0].id;
         }
         return ''; // Should not happen if component rendered
     });
@@ -43,7 +43,7 @@ export function ClassSelectorClient({
     useEffect(() => {
         const classIdFromUrl = searchParams.get('classId');
         // If URL has no classId, but we have a valid default selectedValue
-        if (!classIdFromUrl && selectedValue && allTeamClasses.some(c => c.id.toString() === selectedValue)) {
+        if (!classIdFromUrl && selectedValue && allTeamClasses.some(c => c.id === selectedValue)) {
             startTransition(() => {
                 const newSearchParams = new URLSearchParams(searchParams.toString());
                 newSearchParams.set('classId', selectedValue);
@@ -58,7 +58,7 @@ export function ClassSelectorClient({
     // Effect to update selectedValue if URL changes externally (e.g., back/forward)
     useEffect(() => {
         const classIdFromUrl = searchParams.get('classId');
-        if (classIdFromUrl && allTeamClasses.some(c => c.id.toString() === classIdFromUrl)) {
+        if (classIdFromUrl && allTeamClasses.some(c => c.id === classIdFromUrl)) {
             if (classIdFromUrl !== selectedValue) {
                 setSelectedValue(classIdFromUrl);
             }
@@ -94,7 +94,7 @@ export function ClassSelectorClient({
                     <>
                         <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">My Classes</div>
                         {userTaughtClasses.map((cls) => (
-                            <SelectItem key={cls.id} value={cls.id.toString()}>
+                            <SelectItem key={cls.id} value={cls.id}>
                                 {cls.name}
                             </SelectItem>
                         ))}
@@ -105,7 +105,7 @@ export function ClassSelectorClient({
                 {allTeamClasses
                     .filter(cls => !userTaughtClasses.some(taught => taught.id === cls.id)) // Filter out already listed taught classes
                     .map((cls) => (
-                        <SelectItem key={cls.id} value={cls.id.toString()}>
+                        <SelectItem key={cls.id} value={cls.id}>
                             {cls.name}
                         </SelectItem>
                     ))

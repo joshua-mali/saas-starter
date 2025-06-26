@@ -56,7 +56,7 @@ interface PlanningBoardClientProps {
   terms: Term[];
   availableContentGroups: ContentGroupWithContext[];
   initialPlanItems: ClassCurriculumPlanItem[];
-  currentClassId: number | null;
+  currentClassId: string | null;
 }
 
 // Helper function to get weeks between two dates (Ensure this matches Grading page version if needed)
@@ -195,7 +195,7 @@ export default function PlanningBoardClient({
   const searchParams = useSearchParams();
 
   const classIdFromUrl = searchParams.get('classId');
-  const currentClassId = classIdFromUrl ? parseInt(classIdFromUrl, 10) : initialClassId;
+  const currentClassId = classIdFromUrl ? classIdFromUrl : initialClassId;
 
   const [planItems, setPlanItems] = useState<ClassCurriculumPlanItem[]>(initialPlanItems);
   const [classData, setClassData] = useState(initialClassData);
@@ -281,7 +281,7 @@ export default function PlanningBoardClient({
         const tempId = `optimistic-${Date.now()}`;
         const optimisticItem: ClassCurriculumPlanItem = {
             id: tempId as any, // Temporary ID
-            classId: currentClassId, 
+            classId: currentClassId!, // Use non-null assertion since we check above
             contentGroupId,
             weekStartDate: overWeekStartDate,
             durationWeeks: 1, // Add default duration
@@ -321,7 +321,7 @@ export default function PlanningBoardClient({
     }
 
     if (activeType === 'planItem' && overType === 'weekColumn' && overWeekStartDate) {
-        const planItemId = active.data.current?.planItemId as number;
+        const planItemId = active.data.current?.planItemId as string;
         const originalWeekStartDate = active.data.current?.currentWeekStartDate as Date;
         const newWeekStartDateString = formatDate(overWeekStartDate);
         const originalWeekString = formatDate(originalWeekStartDate);
