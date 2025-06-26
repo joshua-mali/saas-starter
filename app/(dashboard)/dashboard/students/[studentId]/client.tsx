@@ -31,20 +31,12 @@ type RankedGroup = {
     averageGrade: number | null;
 };
 
-// Type for Grade Comments
-type GradeComment = {
-    contentGroupName: string;
-    notes: string;
-    createdAt: Date;
-};
-
 interface StudentOverviewClientProps {
     student: Student;
     classData: Class & { stage: Stage | null };
     structuredGrades: Record<number, ProcessedNode>; // Map of Subject IDs to ProcessedNodes
     topContentGroups: RankedGroup[]; // Add top groups prop
     bottomContentGroups: RankedGroup[]; // Add bottom groups prop
-    gradeComments: GradeComment[]; // Add grade comments prop
 }
 
 // Helper to format the average grade for display
@@ -126,8 +118,7 @@ export default function StudentOverviewClient({
     classData,
     structuredGrades,
     topContentGroups,
-    bottomContentGroups,
-    gradeComments
+    bottomContentGroups
 }: StudentOverviewClientProps) {
 
     return (
@@ -191,45 +182,8 @@ export default function StudentOverviewClient({
                         <CardTitle className="text-base">Comments</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        {gradeComments.length > 0 ? (
-                            <div className="space-y-3">
-                                <div>
-                                    <h4 className="font-semibold mb-2 text-sm">Grade Comments</h4>
-                                    <div className="space-y-2">
-                                        {gradeComments.map((comment, index) => (
-                                            <div key={index} className="bg-gray-50 p-3 rounded-lg">
-                                                <div className="flex justify-between items-start mb-1">
-                                                    <span className="font-medium text-sm text-blue-600">
-                                                        {comment.contentGroupName}
-                                                    </span>
-                                                    <span className="text-xs text-muted-foreground">
-                                                        {comment.createdAt.toLocaleDateString()}
-                                                    </span>
-                                                </div>
-                                                <p className="text-sm text-gray-700">{comment.notes}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                                <hr className="my-3" />
-                                <div>
-                                    <h4 className="font-semibold mb-2 text-sm">General Comments</h4>
-                                    <p className="text-muted-foreground text-sm">General teacher comments will appear here.</p>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                <div>
-                                    <h4 className="font-semibold mb-2 text-sm">Grade Comments</h4>
-                                    <p className="text-muted-foreground text-sm">No grade comments yet.</p>
-                                </div>
-                                <hr className="my-3" />
-                                <div>
-                                    <h4 className="font-semibold mb-2 text-sm">General Comments</h4>
-                                    <p className="text-muted-foreground text-sm">General teacher comments will appear here.</p>
-                                </div>
-                            </div>
-                        )}
+                        <p className="text-muted-foreground text-sm">Teacher comments will appear here.</p>
+                        {/* TODO: Add comment input and display list later */}
                     </CardContent>
                 </Card>
             </div>
