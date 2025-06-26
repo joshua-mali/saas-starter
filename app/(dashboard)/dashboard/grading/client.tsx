@@ -28,8 +28,9 @@ import {
     type Term
 } from '@/lib/db/schema';
 import { ChevronLeft, ChevronRight, MessageSquare } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { toast } from "sonner";
 import { saveAssessment } from "./actions"; // Import the server action
 
@@ -77,6 +78,147 @@ const requestIdleCallbackPolyfill = (callback: () => void) => {
         setTimeout(callback, 0);
     }
 };
+
+// Highly optimized notes input component - memoized and isolated
+interface NotesInputProps {
+    cellKey: string;
+    initialValue: string;
+    onNotesChange: (cellKey: string, value: string) => void;
+    disabled: boolean;
+}
+
+const NotesInput = memo(({ cellKey, initialValue, onNotesChange, disabled }: NotesInputProps) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+    const currentValueRef = useRef(initialValue);
+    
+    // Use direct DOM manipulation for maximum performance
+    const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        e.stopPropagation();
+        const newValue = e.target.value;
+        currentValueRef.current = newValue;
+        
+        // Call the parent's change handler without any React state updates
+        onNotesChange(cellKey, newValue);
+    }, [cellKey, onNotesChange]);
+
+    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+        e.stopPropagation();
+        // Don't close dropdown or save on Enter, just continue typing
+    }, []);
+
+    // Initialize the input value only once
+    useEffect(() => {
+        if (inputRef.current && inputRef.current.value !== initialValue) {
+            inputRef.current.value = initialValue;
+            currentValueRef.current = initialValue;
+        }
+    }, [initialValue]);
+
+    return (
+        <Input
+            ref={inputRef}
+            type="text"
+            placeholder="Add a note..."
+            defaultValue={initialValue}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            className="w-full text-sm"
+            disabled={disabled}
+        />
+    );
+});
+
+NotesInput.displayName = 'NotesInput';
+
+// Memoized grade cell component to prevent unnecessary re-renders
+interface GradeCellProps {
+    enrollment: StudentWithEnrollment;
+    item: PlannedItemWithContentGroup;
+    currentGradeScaleId: number | undefined;
+    hasNotes: string | null | undefined;
+    gradeScales: GradeScale[];
+    isPending: boolean;
+    onGradeChange: (studentEnrollmentId: number, classCurriculumPlanId: number, contentGroupId: number, newGradeScaleId: number | null) => void;
+    onDropdownClose: (studentEnrollmentId: number, classCurriculumPlanId: number, contentGroupId: number) => void;
+    onNotesChange: (cellKey: string, value: string) => void;
+    cellNotes: Record<string, string>;
+}
+
+const GradeCell = memo(({ 
+    enrollment, 
+    item, 
+    currentGradeScaleId, 
+    hasNotes, 
+    gradeScales, 
+    isPending,
+    onGradeChange,
+    onDropdownClose,
+    onNotesChange,
+    cellNotes
+}: GradeCellProps) => {
+    const cellKey = `${enrollment.id}-${item.id}`;
+    
+    const handleGradeChange = useCallback((value: string) => {
+        const newGradeId = value === '_clear_' || value === '' ? null : parseInt(value, 10);
+        onGradeChange(enrollment.id, item.id, item.contentGroupId, newGradeId);
+    }, [enrollment.id, item.id, item.contentGroupId, onGradeChange]);
+
+    const handleOpenChange = useCallback((open: boolean) => {
+        if (!open) {
+            onDropdownClose(enrollment.id, item.id, item.contentGroupId);
+        }
+    }, [enrollment.id, item.id, item.contentGroupId, onDropdownClose]);
+
+    return (
+        <TableCell
+            className="px-4 py-2 text-sm align-top"
+            style={{
+                minWidth: '140px',
+                overflowWrap: 'break-word',
+                wordBreak: 'break-word',
+                whiteSpace: 'normal'
+            }}
+        >
+            <div className="relative">
+                <Select
+                    value={currentGradeScaleId?.toString() ?? ''}
+                    onValueChange={handleGradeChange}
+                    onOpenChange={handleOpenChange}
+                    disabled={isPending}
+                >
+                    <SelectTrigger className="w-full">
+                        <div className="flex items-center justify-between w-full">
+                            <SelectValue placeholder="Select Grade..." />
+                            {hasNotes && (
+                                <MessageSquare className="h-4 w-4 text-blue-500 ml-2" />
+                            )}
+                        </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                        {/* Option to clear the grade */}
+                        <SelectItem value="_clear_">-</SelectItem>
+                        {gradeScales.map((scale) => (
+                            <SelectItem key={scale.id} value={scale.id.toString()}>
+                                {scale.name}
+                            </SelectItem>
+                        ))}
+                        {/* Notes input at the bottom */}
+                        <div className="p-2 border-t">
+                            <NotesInput
+                                cellKey={cellKey}
+                                initialValue={cellNotes[cellKey] || ''}
+                                onNotesChange={onNotesChange}
+                                disabled={isPending}
+                            />
+                        </div>
+                    </SelectContent>
+                </Select>
+            </div>
+        </TableCell>
+    );
+});
+
+GradeCell.displayName = 'GradeCell';
 
 export default function GradingTableClient({
     classData: initialClassData,
@@ -162,29 +304,31 @@ export default function GradingTableClient({
     const canGoPrev = currentWeekIndex > 0;
     const canGoNext = currentWeekIndex < allWeeks.length - 1;
 
-    const navigateToWeek = (weekDate: Date) => {
+    const navigateToWeek = useCallback((weekDate: Date) => {
         if (!currentClassId) return; // Should not happen if URL logic is correct
         const formattedDate = formatDate(weekDate);
         // Construct URL with classId derived from URL state
         const targetUrl = `/dashboard/grading?classId=${currentClassId}&week=${formattedDate}`;
         console.log(`[Grading Client] Navigating to URL: ${targetUrl}`);
         router.push(targetUrl); 
-    };
-    const handlePreviousWeek = () => {
+    }, [currentClassId, router]);
+
+    const handlePreviousWeek = useCallback(() => {
         if (canGoPrev) {
             navigateToWeek(allWeeks[currentWeekIndex - 1]);
         }
-    };
-    const handleNextWeek = () => {
+    }, [canGoPrev, navigateToWeek, allWeeks, currentWeekIndex]);
+
+    const handleNextWeek = useCallback(() => {
         if (canGoNext) {
             navigateToWeek(allWeeks[currentWeekIndex + 1]);
         }
-    };
+    }, [canGoNext, navigateToWeek, allWeeks, currentWeekIndex]);
 
     const currentWeekFormatted = formatDate(currentWeek);
 
     // --- Batched state update function ---
-    const flushPendingUpdates = () => {
+    const flushPendingUpdates = useCallback(() => {
         if (pendingUpdatesRef.current.size > 0) {
             const updates: Record<string, string> = {};
             pendingUpdatesRef.current.forEach(cellKey => {
@@ -195,10 +339,10 @@ export default function GradingTableClient({
             pendingUpdatesRef.current.clear();
         }
         updateQueuedRef.current = false;
-    };
+    }, []);
 
     // --- Grade Change Handler ---
-    const handleGradeChange = (
+    const handleGradeChange = useCallback((
         studentEnrollmentId: number,
         classCurriculumPlanId: number,
         contentGroupId: number,
@@ -309,16 +453,13 @@ export default function GradingTableClient({
                 }
             });
         });
-    };
+    }, [currentClassId, assessments, currentWeek, cellNotesRef]);
 
     // --- Notes Change Handler (optimized for performance) ---
-    const handleNotesChange = (
-        studentEnrollmentId: number,
-        classCurriculumPlanId: number,
+    const handleNotesChange = useCallback((
+        cellKey: string,
         newNotes: string
     ) => {
-        const cellKey = `${studentEnrollmentId}-${classCurriculumPlanId}`;
-        
         // Immediately update the ref (this is fast and doesn't trigger re-renders)
         cellNotesRef.current[cellKey] = newNotes;
         
@@ -330,10 +471,10 @@ export default function GradingTableClient({
             updateQueuedRef.current = true;
             requestIdleCallbackPolyfill(flushPendingUpdates);
         }
-    };
+    }, [flushPendingUpdates]);
 
     // --- Handle dropdown close - save notes if they changed ---
-    const handleDropdownClose = (
+    const handleDropdownClose = useCallback((
         studentEnrollmentId: number,
         classCurriculumPlanId: number,
         contentGroupId: number
@@ -365,7 +506,7 @@ export default function GradingTableClient({
                 existingAssessment?.gradeScaleId || null
             );
         }
-    };
+    }, [assessments, flushPendingUpdates, handleGradeChange]);
 
     // --- Rendering Logic ---
 
@@ -511,7 +652,12 @@ export default function GradingTableClient({
                                         maxWidth: '200px'
                                     }}
                                 >
-                                    {enrollment.student.firstName} {enrollment.student.lastName}
+                                    <Link 
+                                        href={`/dashboard/students/${enrollment.student.id}?classId=${currentClassId}`}
+                                        className="text-blue-600 hover:text-blue-800 hover:underline"
+                                    >
+                                        {enrollment.student.firstName} {enrollment.student.lastName}
+                                    </Link>
                                 </TableCell>
 
                                 {/* Grading Cells - Dynamic width */}
@@ -532,81 +678,19 @@ export default function GradingTableClient({
                                     const hasNotes = cellNotes[cellKey] || existingAssessment?.notes;
 
                                     return (
-                                        <TableCell
+                                        <GradeCell
                                             key={item.id}
-                                            className="px-4 py-2 text-sm align-top"
-                                            style={{
-                                                minWidth: '140px',
-                                                overflowWrap: 'break-word',
-                                                wordBreak: 'break-word',
-                                                whiteSpace: 'normal'
-                                            }}
-                                        >
-                                            <div className="relative">
-                                                <Select
-                                                    value={currentGradeScaleId?.toString() ?? ''}
-                                                    onValueChange={(value) => {
-                                                        // Convert the selected string value back to a number or null
-                                                        const newGradeId = value === '_clear_' || value === '' ? null : parseInt(value, 10);
-                                                        
-                                                        // Call the handler function (this will save both grade and current notes)
-                                                        handleGradeChange(
-                                                            enrollment.id,          // studentEnrollmentId
-                                                            item.id,                // classCurriculumPlanId
-                                                            item.contentGroupId,    // contentGroupId
-                                                            newGradeId              // newGradeScaleId (number | null)
-                                                        );
-                                                    }}
-                                                    onOpenChange={(open) => {
-                                                        // When dropdown closes, save notes if they've changed
-                                                        if (!open) {
-                                                            handleDropdownClose(
-                                                                enrollment.id,
-                                                                item.id,
-                                                                item.contentGroupId
-                                                            );
-                                                        }
-                                                    }}
-                                                    disabled={isPending}
-                                                >
-                                                    <SelectTrigger className="w-full">
-                                                        <div className="flex items-center justify-between w-full">
-                                                            <SelectValue placeholder="Select Grade..." />
-                                                            {hasNotes && (
-                                                                <MessageSquare className="h-4 w-4 text-blue-500 ml-2" />
-                                                            )}
-                                                        </div>
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {/* Option to clear the grade */}
-                                                        <SelectItem value="_clear_">-</SelectItem>
-                                                        {gradeScales.map((scale) => (
-                                                            <SelectItem key={scale.id} value={scale.id.toString()}>
-                                                                {scale.name}
-                                                            </SelectItem>
-                                                        ))}
-                                                        {/* Notes input at the bottom */}
-                                                        <div className="p-2 border-t">
-                                                            <Input
-                                                                type="text"
-                                                                placeholder="Add a note..."
-                                                                defaultValue={cellNotes[cellKey] || ''}
-                                                                onChange={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleNotesChange(enrollment.id, item.id, e.target.value);
-                                                                }}
-                                                                onKeyDown={(e) => {
-                                                                    e.stopPropagation();
-                                                                    // Don't close dropdown or save on Enter, just continue typing
-                                                                }}
-                                                                className="w-full text-sm"
-                                                                disabled={isPending}
-                                                            />
-                                                        </div>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        </TableCell>
+                                            enrollment={enrollment}
+                                            item={item}
+                                            currentGradeScaleId={currentGradeScaleId}
+                                            hasNotes={hasNotes}
+                                            gradeScales={gradeScales}
+                                            isPending={isPending}
+                                            onGradeChange={handleGradeChange}
+                                            onDropdownClose={handleDropdownClose}
+                                            onNotesChange={handleNotesChange}
+                                            cellNotes={cellNotes}
+                                        />
                                     );
                                 })}
                             </TableRow>
