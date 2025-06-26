@@ -19,7 +19,7 @@ import {
     type StudentEnrollment
 } from '@/lib/db/schema';
 import { createClient } from '@/lib/supabase/server';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull, ne } from 'drizzle-orm';
 import { notFound, redirect } from 'next/navigation';
 import StudentOverviewClient from './client'; // Import the client component
 
@@ -96,6 +96,39 @@ async function getStudentAssessmentsForEnrollment(enrollmentId: number): Promise
     return db.select()
              .from(studentAssessments)
              .where(eq(studentAssessments.studentEnrollmentId, enrollmentId));
+}
+
+// --- Helper to Extract Grade Comments ---
+async function getGradeCommentsForEnrollment(enrollmentId: number): Promise<Array<{
+    contentGroupName: string;
+    notes: string;
+    createdAt: Date;
+}>> {
+    const assessmentsWithNotes = await db.select({
+        notes: studentAssessments.notes,
+        contentGroupId: studentAssessments.contentGroupId,
+        createdAt: studentAssessments.createdAt,
+        contentGroupName: contentGroups.name
+    })
+    .from(studentAssessments)
+    .leftJoin(contentGroups, eq(studentAssessments.contentGroupId, contentGroups.id))
+    .where(
+        and(
+            eq(studentAssessments.studentEnrollmentId, enrollmentId),
+            // Only get assessments that have notes
+            isNotNull(studentAssessments.notes),
+            ne(studentAssessments.notes, '')
+        )
+    )
+    .orderBy(studentAssessments.createdAt);
+
+    return assessmentsWithNotes
+        .filter(assessment => assessment.notes && assessment.contentGroupName)
+        .map(assessment => ({
+            contentGroupName: assessment.contentGroupName!,
+            notes: assessment.notes!,
+            createdAt: assessment.createdAt
+        }));
 }
 
 async function getGradeScalesForTeam(teamId: number): Promise<GradeScale[]> {
@@ -359,15 +392,17 @@ export default async function StudentOverviewPage({
         notFound();
     }
 
-    const [hierarchyData, assessmentsData, gradeScalesData] = await Promise.all([
+    const [hierarchyData, assessmentsData, gradeScalesData, gradeComments] = await Promise.all([
         getFullCurriculumHierarchy(classData.stageId),
         getStudentAssessmentsForEnrollment(enrollment.id), // Use enrollment ID
-        getGradeScalesForTeam(classData.teamId)
+        getGradeScalesForTeam(classData.teamId),
+        getGradeCommentsForEnrollment(enrollment.id) // Fetch grade comments
     ]);
     
     console.log(`Fetched ${hierarchyData.length} hierarchy items.`);
     console.log(`Fetched ${assessmentsData.length} assessments.`);
     console.log(`Fetched ${gradeScalesData.length} grade scales.`);
+    console.log(`Fetched ${gradeComments.length} grade comments.`);
 
     // --- Process Data ---
     const processedGrades = processStudentGrades(hierarchyData, assessmentsData, gradeScalesData);
@@ -389,6 +424,7 @@ export default async function StudentOverviewPage({
                 structuredGrades={processedGrades} 
                 topContentGroups={topGroups}
                 bottomContentGroups={bottomGroups}
+                gradeComments={gradeComments}
              />
         </div>
     );

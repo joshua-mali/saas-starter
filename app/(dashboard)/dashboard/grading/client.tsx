@@ -27,7 +27,7 @@ import {
     type StudentEnrollment,
     type Term
 } from '@/lib/db/schema';
-import { ChevronLeft, ChevronRight, MessageSquare } from "lucide-react";
+import { ChevronLeft, ChevronRight, MessageSquare, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
@@ -652,12 +652,14 @@ export default function GradingTableClient({
                                         maxWidth: '200px'
                                     }}
                                 >
-                                    <Link 
-                                        href={`/dashboard/students/${enrollment.student.id}?classId=${currentClassId}`}
-                                        className="text-blue-600 hover:text-blue-800 hover:underline"
-                                    >
-                                        {enrollment.student.firstName} {enrollment.student.lastName}
-                                    </Link>
+                                    <div className="flex flex-col space-y-2">
+                                        {/* Left justify the button */}
+                                        <Link href={`/dashboard/students/${enrollment.student.id}?classId=${currentClassId}`} passHref>
+                                            <Button variant="outline" size="sm" className="w-full" style={{ textAlign: 'left', justifyContent: 'flex-start' }} >
+                                                <User className="mr-1 h-4 w-4" /> {enrollment.student.firstName} {enrollment.student.lastName}
+                                            </Button>
+                                        </Link>
+                                    </div>
                                 </TableCell>
 
                                 {/* Grading Cells - Dynamic width */}

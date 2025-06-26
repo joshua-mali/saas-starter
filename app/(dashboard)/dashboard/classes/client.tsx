@@ -95,7 +95,7 @@ Enter the details for your new class.
                   {stages.length > 0 ? (
                     stages.map((stage) => (
                       <SelectItem key={stage.id} value={stage.id.toString()}>
-                        {stage.name} ({stage.yearLevels})
+                        {stage.name}
                       </SelectItem>
                     ))
                   ) : (
@@ -130,7 +130,7 @@ Enter the details for your new class.
                     </span>
                     {cls.stage && (
                       <span className="ml-2 text-sm text-muted-foreground">
-                        {cls.stage.name}
+                        Stage {cls.stage.name}
                       </span>
                     )}
                   </div>
