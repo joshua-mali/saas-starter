@@ -152,7 +152,7 @@ function DraggablePlanItem({ item, contentGroupName, isOverlay }: DraggablePlanI
       {...attributes}
       className={cn("cursor-grab rounded border bg-card p-2 text-sm shadow mb-2", isOverlay && "shadow-lg")}
     >
-      <p>{contentGroupName || `Content Group ${item.contentGroupId}`} (ID: {item.id})</p>
+      <p>{contentGroupName || `Content Group ${item.contentGroupId}`}</p>
     </div>
   );
 }

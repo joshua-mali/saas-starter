@@ -135,7 +135,7 @@ export default async function DashboardPage() {
   // Render the TeamSettings component
   return (
     <div className="p-4 lg:p-8">
-      <h1 className="text-lg lg:text-2xl font-medium mb-6">Team & Subscription</h1>
+      <h1 className="text-lg lg:text-2xl font-medium mb-6">Welcome back, {user.user_metadata.full_name}!</h1>
       <TeamSettings 
         teamData={adaptedTeamData as any} 
         currentMemberCount={adaptedTeamData.teamMembers.length}

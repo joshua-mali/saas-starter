@@ -4,10 +4,10 @@ import {
     classCurriculumPlan,
     classes,
     classTeachers,
-    gradeScales,
+    gradeScales as gradeScalesTable,
     studentAssessments,
     studentEnrollments,
-    terms,
+    terms as termsTable,
     type Class,
     type ClassCurriculumPlanItem,
     type GradeScale,
@@ -98,74 +98,73 @@ async function getClassDetails(classId: number, userId: string): Promise<(Class 
     return result ? { ...result, teamId: result.teamId } : null;
 }
 
-type StudentWithEnrollment = StudentEnrollment & { student: Student };
-async function getEnrolledStudents(classId: number): Promise<StudentWithEnrollment[]> {
-    return db.query.studentEnrollments.findMany({
-        where: and(
-            eq(studentEnrollments.classId, classId),
-            eq(studentEnrollments.status, 'active') // Only active students
-        ),
-        with: {
-            student: true, // Include student details
-        },
-        orderBy: (enrollments, { asc }) => [asc(enrollments.studentId)], // Consistent order
-    });
-}
-
-async function getGradeScales(teamId: number): Promise<GradeScale[]> {
-    // TODO: Allow team-specific grade scales if needed
-    return db.select().from(gradeScales).orderBy(gradeScales.numericValue);
-}
-
-// Reverted: Query directly using the provided (Monday) week start date
-type PlannedItemWithContentGroup = ClassCurriculumPlanItem & { contentGroup: { name: string } };
-async function getPlannedItemsForWeek(classId: number, mondayWeekStartDate: Date): Promise<PlannedItemWithContentGroup[]> {
-    // Drizzle ORM should handle matching the JS Date object to the database date column,
-    // ignoring the time part if the column type is `date`.
-    console.log(`[getPlannedItemsForWeek] Querying for Monday: ${mondayWeekStartDate.toISOString()}`);
-
-    return db.query.classCurriculumPlan.findMany({
-        where: and(
-            eq(classCurriculumPlan.classId, classId),
-            // Query directly with the Monday date - assumes DB will be updated
-            eq(classCurriculumPlan.weekStartDate, mondayWeekStartDate) 
-        ),
-        with: {
-            contentGroup: {
-                columns: { name: true } 
-            }
-        },
-        orderBy: (planItems, { asc }) => [asc(planItems.contentGroupId)],
-    });
-}
-
-async function getExistingAssessments(
-    enrollmentIds: number[], 
+// OPTIMIZED: Single query to get all grading data
+async function getGradingData(
+    classId: number, 
+    teamId: number, 
+    calendarYear: number, 
     weekStartDate: Date
-): Promise<StudentAssessment[]> {
-    console.log(`[getExistingAssessments] Fetching for date: ${weekStartDate.toISOString()}`);
-    if (enrollmentIds.length === 0) {
-        return [];
-    }
-    try {
-        const assessments = await db.select().from(studentAssessments)
-                .where(and(
-                    inArray(studentAssessments.studentEnrollmentId, enrollmentIds),
-                    eq(studentAssessments.assessmentDate, weekStartDate)
-                ));
-        console.log(`[getExistingAssessments] Found ${assessments.length} assessments.`);
-        return assessments;
-    } catch (error) {
-        console.error(`[getExistingAssessments] Error fetching assessments:`, error);
-        return [];
-    }
-}
+): Promise<{
+    students: (StudentEnrollment & { student: Student })[];
+    gradeScales: GradeScale[];
+    plannedItems: (ClassCurriculumPlanItem & { contentGroup: { name: string } })[];
+    assessments: StudentAssessment[];
+    terms: Term[];
+}> {
+    // Execute all queries in parallel for better performance
+    const [studentsResult, gradeScalesResult, plannedItemsResult, termsResult] = await Promise.all([
+        // Get students for this class
+        db.query.studentEnrollments.findMany({
+            where: and(
+                eq(studentEnrollments.classId, classId),
+                eq(studentEnrollments.status, 'active')
+            ),
+            with: {
+                student: true,
+            },
+            orderBy: (enrollments, { asc }) => [asc(enrollments.studentId)],
+        }),
+        
+        // Get grade scales
+        db.select().from(gradeScalesTable).orderBy(gradeScalesTable.numericValue),
+        
+        // Get planned items for the week
+        db.query.classCurriculumPlan.findMany({
+            where: and(
+                eq(classCurriculumPlan.classId, classId),
+                eq(classCurriculumPlan.weekStartDate, weekStartDate)
+            ),
+            with: {
+                contentGroup: {
+                    columns: { name: true }
+                }
+            },
+            orderBy: (planItems, { asc }) => [asc(planItems.contentGroupId)],
+        }),
+        
+        // Get terms for the year
+        db.select().from(termsTable)
+          .where(and(eq(termsTable.teamId, teamId), eq(termsTable.calendarYear, calendarYear)))
+          .orderBy(termsTable.termNumber)
+    ]);
 
-// Add function to get terms for the class year
-async function getTermsForYear(teamId: number, calendarYear: number): Promise<Term[]> {
-    return db.select().from(terms)
-             .where(and(eq(terms.teamId, teamId), eq(terms.calendarYear, calendarYear)))
-             .orderBy(terms.termNumber);
+    // Get assessments only if we have students and planned items
+    let assessments: StudentAssessment[] = [];
+    if (studentsResult.length > 0 && plannedItemsResult.length > 0) {
+        assessments = await db.select().from(studentAssessments)
+            .where(and(
+                inArray(studentAssessments.studentEnrollmentId, studentsResult.map(s => s.id)),
+                eq(studentAssessments.assessmentDate, weekStartDate)
+            ));
+    }
+
+    return {
+        students: studentsResult,
+        gradeScales: gradeScalesResult,
+        plannedItems: plannedItemsResult,
+        assessments,
+        terms: termsResult
+    };
 }
 
 // --- Page Component Props Interface ---
@@ -179,7 +178,7 @@ export default async function GradingPage({ searchParams: searchParamsPromise }:
     const searchParams = await searchParamsPromise;
     const rawClassId = Array.isArray(searchParams.classId) ? searchParams.classId[0] : searchParams.classId;
     const weekParam = Array.isArray(searchParams.week) ? searchParams.week[0] : searchParams.week;
-    const wasWeekRequested = !!weekParam; // Track if a specific week was requested
+    const wasWeekRequested = !!weekParam;
 
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -219,7 +218,7 @@ export default async function GradingPage({ searchParams: searchParamsPromise }:
         );
     }
 
-    // Determine the target week string and Date object
+    // Determine the target week
     let targetWeekString: string;
     if (weekParam && /^\d{4}-\d{2}-\d{2}$/.test(weekParam)) {
         targetWeekString = weekParam;
@@ -228,22 +227,20 @@ export default async function GradingPage({ searchParams: searchParamsPromise }:
     }
     const targetWeekDate = new Date(`${targetWeekString}T00:00:00Z`);
 
-    // Fetch essential data
+    // Get class details first
     const classData = await getClassDetails(classId, user.id);
     if (!classData) {
         notFound();
     }
-    const [studentsData, gradeScalesData, termsData] = await Promise.all([
-        getEnrolledStudents(classId),
-        getGradeScales(classData.teamId),
-        getTermsForYear(classData.teamId, classData.calendarYear),
-    ]);
 
-    // Fetch initial planned items and assessments for the target week
-    let plannedItemsData = await getPlannedItemsForWeek(classId, targetWeekDate);
-    let assessmentsData = plannedItemsData.length > 0 
-        ? await getExistingAssessments(studentsData.map(s => s.id), targetWeekDate)
-        : [];
+    // OPTIMIZED: Get all data in one go
+    const {
+        students: studentsData,
+        gradeScales: gradeScalesData,
+        plannedItems: plannedItemsData,
+        assessments: assessmentsData,
+        terms: termsData
+    } = await getGradingData(classId, classData.teamId, classData.calendarYear, targetWeekDate);
 
     // Calculate allWeeks
     const allWeeks = termsData.flatMap(term => {
@@ -252,31 +249,32 @@ export default async function GradingPage({ searchParams: searchParamsPromise }:
         return (!isNaN(termStart.getTime()) && !isNaN(termEnd.getTime())) ? getWeeksBetween(termStart, termEnd) : [];
     }).sort((a, b) => a.getTime() - b.getTime());
 
-    // --- MODIFIED: Fallback Logic - Only apply if NO specific week was requested --- 
+    // Fallback logic (only if no specific week was requested and no items found)
     let finalTargetWeekDate = targetWeekDate;
+    let finalPlannedItems = plannedItemsData;
+    let finalAssessments = assessmentsData;
 
     if (!wasWeekRequested && plannedItemsData.length === 0 && allWeeks.length > 0) {
-        console.log(`[GradingPage Server] Initial load has no items for current week ${targetWeekDate.toISOString()}. Finding fallback.`);
+        console.log(`[GradingPage Server] No items for current week, finding fallback.`);
         const potentialFallbackWeeks = allWeeks.filter(w => w.getTime() <= targetWeekDate.getTime());
-        let fallbackWeekDate: Date | null = potentialFallbackWeeks.length > 0 ? potentialFallbackWeeks[potentialFallbackWeeks.length - 1] : (allWeeks.length > 0 ? allWeeks[allWeeks.length - 1] : null);
+        const fallbackWeekDate = potentialFallbackWeeks.length > 0 
+            ? potentialFallbackWeeks[potentialFallbackWeeks.length - 1] 
+            : (allWeeks.length > 0 ? allWeeks[allWeeks.length - 1] : null);
 
         if (fallbackWeekDate && fallbackWeekDate.getTime() !== targetWeekDate.getTime()) {
             console.log(`[GradingPage Server] Falling back to week: ${fallbackWeekDate.toISOString()}`);
             finalTargetWeekDate = fallbackWeekDate;
-            // Re-fetch planned items and assessments for the fallback week
-            plannedItemsData = await getPlannedItemsForWeek(classId, finalTargetWeekDate);
-            assessmentsData = plannedItemsData.length > 0 
-                ? await getExistingAssessments(studentsData.map(s => s.id), finalTargetWeekDate)
-                : [];
+            
+            // Re-fetch for fallback week
+            const fallbackData = await getGradingData(classId, classData.teamId, classData.calendarYear, finalTargetWeekDate);
+            finalPlannedItems = fallbackData.plannedItems;
+            finalAssessments = fallbackData.assessments;
         }
-    } 
-    // If a week *was* requested, we stick with the initially fetched data (even if empty)
-    // --- End Modified Fallback Logic ---
+    }
 
-    // --- Logging --- 
     console.log(`[GradingPage Server] Final Target Week: ${finalTargetWeekDate.toISOString()}`);
-    console.log(`[GradingPage Server] Passing ${plannedItemsData.length} planned items to client.`);
-    console.log(`[GradingPage Server] Passing ${assessmentsData.length} assessments to client.`);
+    console.log(`[GradingPage Server] Passing ${finalPlannedItems.length} planned items to client.`);
+    console.log(`[GradingPage Server] Passing ${finalAssessments.length} assessments to client.`);
 
     return (
         <div className="flex flex-col h-full">
@@ -285,8 +283,8 @@ export default async function GradingPage({ searchParams: searchParamsPromise }:
                 classData={classData}
                 students={studentsData}
                 gradeScales={gradeScalesData}
-                plannedItems={plannedItemsData}
-                initialAssessments={assessmentsData} // Use assessmentsData variable
+                plannedItems={finalPlannedItems}
+                initialAssessments={finalAssessments}
                 terms={termsData}
                 currentWeek={finalTargetWeekDate}
                 allWeeks={allWeeks}
