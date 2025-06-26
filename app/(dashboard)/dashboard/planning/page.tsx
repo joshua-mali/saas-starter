@@ -3,19 +3,19 @@ export const dynamic = "force-dynamic";
 import { getTeacherClasses, getTeamClasses, getUserTeam } from '@/app/actions/get-classes';
 import { db } from '@/lib/db/drizzle';
 import {
-  classCurriculumPlan,
-  classes,
-  classTeachers,
-  contentGroups,
-  focusAreas,
-  focusGroups,
-  outcomes,
-  subjects,
-  terms,
-  type Class,
-  type ClassCurriculumPlanItem,
-  type Stage,
-  type Term
+    classCurriculumPlan,
+    classes,
+    classTeachers,
+    contentGroups,
+    focusAreas,
+    focusGroups,
+    outcomes,
+    subjects,
+    terms,
+    type Class,
+    type ClassCurriculumPlanItem,
+    type Stage,
+    type Term
 } from '@/lib/db/schema';
 import { createClient } from '@/lib/supabase/server';
 import { and, eq } from 'drizzle-orm';
@@ -24,7 +24,7 @@ import PlanningBoardClient from './client'; // Client component for the board
 
 // --- Data Fetching Functions ---
 
-async function checkTeacherAuthorization(classId: number, userId: string): Promise<boolean> {
+async function checkTeacherAuthorization(classId: string, userId: string): Promise<boolean> {
   const teacherLink = await db.query.classTeachers.findFirst({
     where: and(
       eq(classTeachers.classId, classId),
@@ -35,7 +35,7 @@ async function checkTeacherAuthorization(classId: number, userId: string): Promi
   return !!teacherLink;
 }
 
-async function getClassDetails(classId: number): Promise<(Class & { stage: Stage | null, teamId: number }) | null> {
+async function getClassDetails(classId: string): Promise<(Class & { stage: Stage | null, teamId: number }) | null> {
   const result = await db.query.classes.findFirst({
     where: eq(classes.id, classId),
     with: {
@@ -77,7 +77,7 @@ async function getContentGroupsForStage(stageId: number) {
 
 type ContentGroupWithContext = Awaited<ReturnType<typeof getContentGroupsForStage>>[0];
 
-async function getExistingPlan(classId: number): Promise<ClassCurriculumPlanItem[]> {
+async function getExistingPlan(classId: string): Promise<ClassCurriculumPlanItem[]> {
   return db.select().from(classCurriculumPlan)
     .where(eq(classCurriculumPlan.classId, classId));
 }
@@ -113,11 +113,10 @@ export default async function PlanningPage({ searchParams: searchParamsPromise }
     getTeamClasses(userTeamId)
   ]);
 
-  let classId: number | null = null;
+  let classId: string | null = null;
   if (rawClassId) {
-    const parsedId = parseInt(rawClassId, 10);
-    if (!isNaN(parsedId) && allTeamClasses.some(c => c.id === parsedId)) {
-        classId = parsedId;
+    if (allTeamClasses.some(c => c.id === rawClassId)) {
+        classId = rawClassId;
     } else {
          console.warn(`Invalid or unauthorized classId requested: ${rawClassId}.`);
     }

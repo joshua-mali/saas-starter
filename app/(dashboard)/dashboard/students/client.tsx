@@ -2,22 +2,22 @@
 
 import { Button } from '@/components/ui/button'
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardDescription,
+    CardFooter,
+    CardHeader,
+    CardTitle,
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow
 } from "@/components/ui/table"
 import { UserCog } from 'lucide-react'; // For loading indicators and icons
 import Link from 'next/link'
@@ -30,14 +30,14 @@ import { addStudentToClass } from './actions'; // Corrected action name
 // Type for student data received from server
 // (Ideally, move this type definition to a shared file)
 type StudentListData = {
-    enrollmentId: number;
-    studentId: number;
+    enrollmentId: string;
+    studentId: string;
     firstName: string;
     lastName: string;
 };
 
 interface StudentsPageClientProps {
-  currentClassId: number | null; // ID of the globally selected class
+  currentClassId: string | null; // ID of the globally selected class
   students: StudentListData[];   // Students for the selected class, passed from server
 }
 
@@ -63,7 +63,7 @@ export default function StudentsPageClient({
 
   // Derive classId primarily from URL, fall back to initial prop if needed
   const classIdFromUrl = searchParams.get('classId');
-  const currentClassId = classIdFromUrl ? parseInt(classIdFromUrl, 10) : initialClassId;
+  const currentClassId = classIdFromUrl ? classIdFromUrl : initialClassId;
   
   // State for students, potentially updated if classId changes client-side
   // (For now, we rely on server fetch based on URL)
@@ -116,7 +116,7 @@ export default function StudentsPageClient({
                 toast.error("Please select a class before adding a student.");
                 return;
             }
-            formData.append('classId', currentClassId.toString()); // Add classId derived from URL
+            formData.append('classId', currentClassId); // Add classId derived from URL
             formAction(formData); // Call the action with formData
         }}>
           <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">

@@ -2,10 +2,10 @@
 
 import { db } from '@/lib/db/drizzle'
 import {
-  studentEnrollments,
-  students,
-  teamMembers,
-  type Student, // Import the specific type if needed
+    studentEnrollments,
+    students,
+    teamMembers,
+    type Student, // Import the specific type if needed
 } from '@/lib/db/schema'
 import { createClient } from '@/lib/supabase/server'
 import { eq } from 'drizzle-orm'
@@ -14,7 +14,7 @@ import { z } from 'zod'
 
 // Schema for adding a student
 const addStudentSchema = z.object({
-  classId: z.coerce.number().int().positive('Valid Class ID is required'),
+  classId: z.string().uuid('Valid Class ID is required'),
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
   dateOfBirth: z.string().optional(), // Assuming date string from input type=date
@@ -26,12 +26,12 @@ interface ActionResult {
 }
 
 // --- Action to get students for a specific class --- (Called from Client Component)
-export async function getStudentsForClass(classId: number): Promise<{
+export async function getStudentsForClass(classId: string): Promise<{
   // Adjust return type to match the new select structure
   students: { student: Student; enrollmentStatus: string | null }[] | null
   error: string | null
 }> {
-  if (!classId || typeof classId !== 'number' || classId <= 0) {
+  if (!classId || typeof classId !== 'string') {
     return { students: null, error: 'Invalid Class ID provided.' }
   }
 
@@ -164,7 +164,7 @@ interface BatchActionResult {
 
 export async function addStudentsBatch(
     studentsData: { firstName: string; lastName: string }[],
-    classId: number // Add classId parameter
+    classId: string // Add classId parameter
 ): Promise<BatchActionResult> {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -173,7 +173,7 @@ export async function addStudentsBatch(
         return { error: 'User not authenticated' };
     }
 
-    if (!classId || typeof classId !== 'number') {
+    if (!classId || typeof classId !== 'string') {
         return { error: 'Invalid Class ID provided for enrollment.' };
     }
 

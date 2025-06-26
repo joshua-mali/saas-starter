@@ -5,7 +5,7 @@ import Link from 'next/link';
 
 // Matches the server component's expected structure
 type ProcessedStudentReportData = {
-    studentId: number;
+    studentId: string;
     studentFirstName: string;
     studentLastName: string;
     overallAverage: number | null;
@@ -15,7 +15,7 @@ type ProcessedStudentReportData = {
 };
 
 interface ClassReportClientProps {
-    classId: number;
+    classId: string;
     studentReportData: ProcessedStudentReportData[];
     outcomeHeaders: { id: number; name: string }[];
 }

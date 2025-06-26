@@ -26,7 +26,7 @@ import { notFound, redirect } from 'next/navigation';
 import ClassReportClient from './client'; // Import the new client component
 
 // --- Authorization Function (Reuse or adapt from existing page) ---
-async function checkTeacherAuthorization(classId: number, userId: string): Promise<boolean> {
+async function checkTeacherAuthorization(classId: string, userId: string): Promise<boolean> {
     const teacherLink = await db.query.classTeachers.findFirst({
         where: and(
             eq(classTeachers.classId, classId),
@@ -39,7 +39,7 @@ async function checkTeacherAuthorization(classId: number, userId: string): Promi
 
 // --- Data Fetching Functions (Reuse/adapt from existing page) ---
 
-async function getClassDetails(classId: number): Promise<(Class & { stage: Stage | null }) | null | undefined> {
+async function getClassDetails(classId: string): Promise<(Class & { stage: Stage | null }) | null | undefined> {
     return db.query.classes.findFirst({
         where: eq(classes.id, classId),
         with: {
@@ -48,7 +48,7 @@ async function getClassDetails(classId: number): Promise<(Class & { stage: Stage
     });
 }
 
-async function getAllStudentEnrollmentsForClass(classId: number): Promise<(StudentEnrollment & { student: Student })[]> {
+async function getAllStudentEnrollmentsForClass(classId: string): Promise<(StudentEnrollment & { student: Student })[]> {
     return db.query.studentEnrollments.findMany({
         where: eq(studentEnrollments.classId, classId),
         with: {
@@ -85,7 +85,7 @@ async function getFullCurriculumHierarchy(stageId: number) {
 
 type FullHierarchyItem = Awaited<ReturnType<typeof getFullCurriculumHierarchy>>[0];
 
-async function getStudentAssessmentsForEnrollment(enrollmentId: number): Promise<StudentAssessment[]> {
+async function getStudentAssessmentsForEnrollment(enrollmentId: string): Promise<StudentAssessment[]> {
     return db.select()
              .from(studentAssessments)
              .where(eq(studentAssessments.studentEnrollmentId, enrollmentId));
@@ -110,7 +110,7 @@ type ProcessedNode = {
 };
 
 type ProcessedStudentReportData = {
-    studentId: number;
+    studentId: string;
     studentFirstName: string;
     studentLastName: string;
     overallAverage: number | null;
@@ -364,13 +364,9 @@ export default async function ClassReportPage({ searchParams: searchParamsPromis
   }
 
   // --- Get classId from searchParams --- 
-  let classId: number | null = null;
+  let classId: string | null = null;
   if (rawClassId) {
-    const parsedId = parseInt(rawClassId, 10);
-    // TODO: Add validation - Check if user is authorized for this classId (similar to planning/grading)
-    if (!isNaN(parsedId)) { 
-        classId = parsedId;
-    }
+    classId = rawClassId;
   }
 
   // Handle case where no valid classId is provided

@@ -7,14 +7,14 @@ import StudentsPageClient from './client';
 
 // Define the type for the student data we select
 type StudentListData = {
-    enrollmentId: number;
-    studentId: number;
+    enrollmentId: string;
+    studentId: string;
     firstName: string;
     lastName: string;
 };
 
 // Fetch students enrolled in a specific class
-async function getStudentsForClass(classId: number): Promise<StudentListData[]> {
+async function getStudentsForClass(classId: string): Promise<StudentListData[]> {
   return db.select({
       enrollmentId: studentEnrollments.id,
       studentId: students.id,
@@ -43,16 +43,13 @@ export default async function StudentsPage({ searchParams: searchParamsPromise }
     redirect('/sign-in');
   }
 
-  let classId: number | null = null;
+  let classId: string | null = null;
   let fetchedStudents: StudentListData[] = [];
 
   if (rawClassId) {
-      const parsedId = parseInt(rawClassId, 10);
-      if (!isNaN(parsedId)) {
-          // TODO: Add authorization check - can user view this class?
-          classId = parsedId;
-          fetchedStudents = await getStudentsForClass(classId);
-      }
+      // TODO: Add authorization check - can user view this class?
+      classId = rawClassId; // Now expects UUID string
+      fetchedStudents = await getStudentsForClass(classId);
   }
 
   // We might still need the list of classes for the global selector state, 
