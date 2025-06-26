@@ -248,6 +248,23 @@ export const studentAssessments = pgTable('student_assessments', {
     };
   });
 
+// Teacher Comments - Two types: General notes and Student-specific comments
+export const teacherComments = pgTable('teacher_comments', {
+  id: serial('id').primaryKey(),
+  teamId: integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+  authorId: uuid('author_id').notNull().references(() => authUsers.id, { onDelete: 'cascade' }),
+  commentType: varchar('comment_type', { length: 20 }).notNull(), // 'general' or 'student'
+  // For general notes, these will be null:
+  studentId: integer('student_id').references(() => students.id, { onDelete: 'cascade' }),
+  classId: integer('class_id').references(() => classes.id, { onDelete: 'cascade' }),
+  // Comment content
+  title: varchar('title', { length: 255 }),
+  content: text('content').notNull(),
+  isPrivate: boolean('is_private').default(true), // Whether only the author can see it
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const teamsRelations = relations(teams, ({ many }) => ({
   teamMembers: many(teamMembers),
   activityLogs: many(activityLogs),
@@ -255,6 +272,7 @@ export const teamsRelations = relations(teams, ({ many }) => ({
   classes: many(classes),
   students: many(students),
   terms: many(terms),
+  teacherComments: many(teacherComments),
 }));
 
 export const profilesRelations = relations(profiles, ({ one }) => ({
@@ -307,6 +325,7 @@ export const authUsersRelations = relations(authUsers, ({ one, many }) => ({
     relationName: 'UserProfile'
   }),
   classesTaught: many(classTeachers),
+  teacherComments: many(teacherComments),
 }));
 
 export const stagesRelations = relations(stages, ({ many }) => ({
@@ -351,11 +370,13 @@ export const classesRelations = relations(classes, ({ one, many }) => ({
   classTeachers: many(classTeachers),
   studentEnrollments: many(studentEnrollments),
   classCurriculumPlanItems: many(classCurriculumPlan),
+  teacherComments: many(teacherComments),
 }));
 
 export const studentsRelations = relations(students, ({ one, many }) => ({
   team: one(teams, { fields: [students.teamId], references: [teams.id] }),
   studentEnrollments: many(studentEnrollments),
+  teacherComments: many(teacherComments),
 }));
 
 export const classTeachersRelations = relations(classTeachers, ({ one }) => ({
@@ -389,6 +410,13 @@ export const studentAssessmentsRelations = relations(studentAssessments, ({ one 
     contentGroup: one(contentGroups, { fields: [studentAssessments.contentGroupId], references: [contentGroups.id] }),
     contentPoint: one(contentPoints, { fields: [studentAssessments.contentPointId], references: [contentPoints.id] }),
     gradeScale: one(gradeScales, { fields: [studentAssessments.gradeScaleId], references: [gradeScales.id] }),
+}));
+
+export const teacherCommentsRelations = relations(teacherComments, ({ one }) => ({
+    team: one(teams, { fields: [teacherComments.teamId], references: [teams.id] }),
+    author: one(authUsers, { fields: [teacherComments.authorId], references: [authUsers.id] }),
+    student: one(students, { fields: [teacherComments.studentId], references: [students.id] }),
+    class: one(classes, { fields: [teacherComments.classId], references: [classes.id] }),
 }));
 
 export type Profile = typeof profiles.$inferSelect;
@@ -456,3 +484,6 @@ export type NewClassCurriculumPlanItem = typeof classCurriculumPlan.$inferInsert
 
 export type StudentAssessment = typeof studentAssessments.$inferSelect;
 export type NewStudentAssessment = typeof studentAssessments.$inferInsert;
+
+export type TeacherComment = typeof teacherComments.$inferSelect;
+export type NewTeacherComment = typeof teacherComments.$inferInsert;

@@ -235,20 +235,13 @@ export default function StudentOverviewClient({
                                         <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded text-left whitespace-pre-wrap">
                                             {comment.comment}
                                         </p>
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            {comment.contentType === 'contentPoint' ? 'Content Point' : 'Content Group'}
-                                        </p>
+
                                     </div>
                                 ))}
                             </div>
                         ) : (
                             <p className="text-muted-foreground text-sm">No grade comments found for this student.</p>
                         )}
-                        <div className="mt-4 pt-3 border-t">
-                            <p className="text-xs text-muted-foreground">
-                                Note: These are comments made when grades were recorded. General teacher comments will be available separately in the future.
-                            </p>
-                        </div>
                     </CardContent>
                 </Card>
             </div>

@@ -12,7 +12,10 @@ import {
   teams,
 } from '@/lib/db/schema';
 // Import getMemberLimit helper
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { getMemberLimit } from '@/lib/plans';
+import { MessageSquare, Plus, StickyNote } from 'lucide-react';
 // Import logActivity types if needed
 // import { logActivity, ActivityType } from '@/app/(login)/actions';
 
@@ -132,15 +135,98 @@ export default async function DashboardPage() {
     }))
   };
 
-  // Render the TeamSettings component
+  // Render the new layout
   return (
     <div className="p-4 lg:p-8">
       <h1 className="text-lg lg:text-2xl font-medium mb-6">Welcome back, {user.user_metadata.full_name}!</h1>
-      <TeamSettings 
-        teamData={adaptedTeamData as any} 
-        currentMemberCount={adaptedTeamData.teamMembers.length}
-        memberLimit={adaptedTeamData.memberLimit}
-      />
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Left Side - Quick Actions */}
+        <div className="space-y-6">
+          <h2 className="text-lg font-semibold text-gray-900">Quick Actions</h2>
+          
+          {/* General Notes Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <StickyNote className="h-5 w-5 text-yellow-600" />
+                General Notes
+              </CardTitle>
+              <CardDescription>
+                Add quick notes and reminders for yourself
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Create personal notes that only you can see. Perfect for lesson ideas, reminders, or general thoughts.
+                </p>
+                <Button className="w-full" variant="outline">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add General Note
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Student Comments Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-blue-600" />
+                Student Comments
+              </CardTitle>
+              <CardDescription>
+                Add comments about specific students (separate from grades)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Record behavioral observations, parent meeting notes, or general comments about students that are unrelated to their academic grades.
+                </p>
+                <Button className="w-full" variant="outline">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Student Comment
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Placeholder Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Plus className="h-5 w-5 text-gray-400" />
+                Coming Soon
+              </CardTitle>
+              <CardDescription>
+                More quick actions will be available here
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  We're working on additional features to make your teaching workflow even more efficient.
+                </p>
+                <Button className="w-full" variant="outline" disabled>
+                  Feature Coming Soon
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Side - Team Settings */}
+        <div className="space-y-6">
+          <h2 className="text-lg font-semibold text-gray-900">Team Management</h2>
+          <TeamSettings 
+            teamData={adaptedTeamData as any} 
+            currentMemberCount={adaptedTeamData.teamMembers.length}
+            memberLimit={adaptedTeamData.memberLimit}
+          />
+        </div>
+      </div>
     </div>
   );
 }

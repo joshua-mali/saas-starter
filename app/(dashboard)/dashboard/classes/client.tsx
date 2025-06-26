@@ -95,7 +95,7 @@ Enter the details for your new class.
                   {stages.length > 0 ? (
                     stages.map((stage) => (
                       <SelectItem key={stage.id} value={stage.id.toString()}>
-                        {stage.name} ({stage.yearLevels})
+                        {stage.name}
                       </SelectItem>
                     ))
                   ) : (

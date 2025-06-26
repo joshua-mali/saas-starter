@@ -6,7 +6,7 @@ import path from 'path';
 import { db } from '../lib/db/drizzle';
 import {
     contentGroups,
-    contentPoints, // Import outcomes
+    contentPoints,
     focusAreas,
     focusGroups,
     outcomes,
@@ -15,33 +15,35 @@ import {
 } from '../lib/db/schema';
 
 // --- Configuration ---
-// Update file path
-const CSV_FILE_PATH = path.resolve(process.cwd(), './syllabus/Maths Syllabus Stage 1-3.csv'); 
+// Files to process
+const CSV_FILES = [
+    './syllabus/English Syllabus Stage 1-3.csv',
+    './syllabus/Maths Syllabus Stage 1-3.csv'
+];
 // --- End Configuration ---
 
-// Caches
+// Caches - shared across files to avoid duplicates
 const stageCache = new Map();
 const subjectCache = new Map();
-const outcomeCache = new Map(); // Add cache for outcomes: Map<`${subjectId}-${outcomeName}`, outcomeId>
-const focusAreaCache = new Map(); // Key changes: Map<`${outcomeId}-${stageId}-${focusAreaName}`, focusAreaId>
+const outcomeCache = new Map();
+const focusAreaCache = new Map();
 const focusGroupCache = new Map();
 const contentGroupCache = new Map();
 
 async function processRow(row) {
     // --- 1. Extract data ---
-    // Make sure these header names EXACTLY match your CSV file
     const stageName = row['Stage']?.trim();
     const subjectName = row['Subject']?.trim();
-    const outcomeName = row['Outcome']?.trim(); // Get Outcome
+    const outcomeName = row['Outcome']?.trim();
     const focusAreaName = row['Focus Area']?.trim();
     const focusGroupName = row['Focus Group']?.trim();
     const contentGroupName = row['Content Group']?.trim();
     const contentPointName = row['Content Point']?.trim();
-    const contentPointDescription = row['Content Point Description']?.trim(); // Optional
+    const contentPointDescription = row['Content Point Description']?.trim();
   
-    // Validation - added outcomeName
+    // Validation
     if (!stageName || !subjectName || !outcomeName || !focusAreaName || !focusGroupName || !contentGroupName || !contentPointName) {
-      console.warn('Skipping row due to missing core data (Stage, Subject, Outcome, Focus Area, Focus Group, Content Group, Content Point): ', row);
+      console.warn('Skipping row due to missing core data:', row);
       return;
     }
   
@@ -94,7 +96,7 @@ async function processRow(row) {
       }
   
       // --- 5. Find or Create Focus Area ---
-      const focusAreaKey = `${outcomeId}-${stageId}-${focusAreaName}`; // Key uses outcomeId and stageId
+      const focusAreaKey = `${outcomeId}-${stageId}-${focusAreaName}`;
       let focusAreaId = focusAreaCache.get(focusAreaKey);
       if (!focusAreaId) {
           let [focusAreaRecord] = await db.select({ id: focusAreas.id })
@@ -165,7 +167,6 @@ async function processRow(row) {
       }
   
       // --- 8. Create Content Point ---
-      // Check if this specific content point already exists in this content group
       let [contentPointRecord] = await db.select({ id: contentPoints.id })
            .from(contentPoints)
            .where(and(
@@ -180,7 +181,6 @@ async function processRow(row) {
               contentGroupId: contentGroupId,
               name: contentPointName,
               description: contentPointDescription || null
-              // Add orderIndex if available in CSV, e.g., orderIndex: parseInt(row['Order'] || '0')
           });
       } else {
            console.log(`Skipping existing Content Point: ${contentPointName} (Content Group: ${contentGroupName})`);
@@ -188,33 +188,52 @@ async function processRow(row) {
   
     } catch (error) {
       console.error(`Error processing row:`, row, `\nError:`, error);
-      // Optionally re-throw to stop the script on the first error
-      // throw error;
     }
-  } // End of processRow function
+}
 
-async function seedDatabase() {
-  console.log(`Starting seeding from ${CSV_FILE_PATH}...`);
-
-  const stream = fs.createReadStream(CSV_FILE_PATH).pipe(csv());
-
-  console.log('Processing CSV rows sequentially...');
-  // Use for await...of to process the stream sequentially
+async function processFile(csvFilePath) {
+  console.log(`\n=== Processing ${csvFilePath} ===`);
+  
+  const stream = fs.createReadStream(csvFilePath).pipe(csv());
+  
+  let rowCount = 0;
   for await (const row of stream) {
     try {
-      // Await each row's processing before starting the next
       await processRow(row);
+      rowCount++;
+      if (rowCount % 50 === 0) {
+        console.log(`Processed ${rowCount} rows from ${path.basename(csvFilePath)}...`);
+      }
     } catch (error) {
-      // Log error for the specific row but continue processing others
-      console.error(`Error processing row:`, row, `\nError:`, error);
-      // Decide if you want to stop the entire script on first error:
-      // process.exit(1);
+      console.error(`Error processing row in ${csvFilePath}:`, row, `\nError:`, error);
     }
   }
+  
+  console.log(`Completed processing ${csvFilePath} - ${rowCount} rows processed`);
+}
 
-  console.log('CSV file successfully processed.');
-  console.log('Seeding finished.');
-  // process.exit(0); // Let the script exit naturally
+async function seedDatabase() {
+  console.log('Starting syllabus seeding process...\n');
+
+  for (const csvFile of CSV_FILES) {
+    const csvFilePath = path.resolve(process.cwd(), csvFile);
+    
+    if (!fs.existsSync(csvFilePath)) {
+      console.error(`File not found: ${csvFilePath}`);
+      continue;
+    }
+    
+    await processFile(csvFilePath);
+  }
+
+  console.log('\n=== Seeding Summary ===');
+  console.log(`Stages: ${stageCache.size}`);
+  console.log(`Subjects: ${subjectCache.size}`);
+  console.log(`Outcomes: ${outcomeCache.size}`);
+  console.log(`Focus Areas: ${focusAreaCache.size}`);
+  console.log(`Focus Groups: ${focusGroupCache.size}`);
+  console.log(`Content Groups: ${contentGroupCache.size}`);
+  console.log('\nSeeding finished successfully!');
 }
 
 seedDatabase().catch((error) => {
