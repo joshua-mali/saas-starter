@@ -51,7 +51,7 @@ interface GradingTableClientProps {
     currentWeek: Date;
     allWeeks: Date[];
     // Prop for initial ID, can be null if URL is missing it initially
-    currentClassId: number | null;
+    currentClassId: number | null; 
 }
 
 // Helper function to format dates consistently to YYYY-MM-DD
@@ -90,13 +90,13 @@ interface NotesInputProps {
 const NotesInput = memo(({ cellKey, initialValue, onNotesChange, disabled }: NotesInputProps) => {
     const inputRef = useRef<HTMLInputElement>(null);
     const currentValueRef = useRef(initialValue);
-
+    
     // Use direct DOM manipulation for maximum performance
     const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         e.stopPropagation();
         const newValue = e.target.value;
         currentValueRef.current = newValue;
-
+        
         // Call the parent's change handler without any React state updates
         onNotesChange(cellKey, newValue);
     }, [cellKey, onNotesChange]);
@@ -144,12 +144,12 @@ interface GradeCellProps {
     cellNotes: Record<string, string>;
 }
 
-const GradeCell = memo(({
-    enrollment,
-    item,
-    currentGradeScaleId,
-    hasNotes,
-    gradeScales,
+const GradeCell = memo(({ 
+    enrollment, 
+    item, 
+    currentGradeScaleId, 
+    hasNotes, 
+    gradeScales, 
     isPending,
     onGradeChange,
     onDropdownClose,
@@ -157,7 +157,7 @@ const GradeCell = memo(({
     cellNotes
 }: GradeCellProps) => {
     const cellKey = `${enrollment.id}-${item.id}`;
-
+    
     const handleGradeChange = useCallback((value: string) => {
         const newGradeId = value === '_clear_' || value === '' ? null : parseInt(value, 10);
         onGradeChange(enrollment.id, item.id, item.contentGroupId, newGradeId);
@@ -242,8 +242,8 @@ export default function GradingTableClient({
 
     // Derive week primarily from URL, fall back to initial prop
     const weekFromUrl = searchParams.get('week'); // Week is expected as YYYY-MM-DD string
-    const currentWeek = useMemo(() =>
-        weekFromUrl ? new Date(weekFromUrl + 'T00:00:00') : initialCurrentWeek,
+    const currentWeek = useMemo(() => 
+        weekFromUrl ? new Date(weekFromUrl + 'T00:00:00') : initialCurrentWeek, 
         [weekFromUrl, initialCurrentWeek]
     );
 
@@ -255,7 +255,7 @@ export default function GradingTableClient({
 
     // State for tracking notes input for each cell (batched updates for performance)
     const [cellNotes, setCellNotes] = useState<Record<string, string>>({});
-
+    
     // Refs to track the actual current values and pending updates
     const cellNotesRef = useRef<Record<string, string>>({});
     const pendingUpdatesRef = useRef<Set<string>>(new Set());
@@ -268,7 +268,7 @@ export default function GradingTableClient({
         setStudents(initialStudents);
         setPlannedItems(initialPlannedItems);
         setClassData(initialClassData);
-
+        
         // Initialize notes state from existing assessments
         const initialNotes: Record<string, string> = {};
         initialAssessments.forEach(assessment => {
@@ -279,7 +279,7 @@ export default function GradingTableClient({
         });
         setCellNotes(initialNotes);
         cellNotesRef.current = initialNotes;
-
+        
         // Note: currentWeek is handled by the useMemo above
     }, [initialAssessments, initialStudents, initialPlannedItems, initialClassData]);
 
@@ -310,7 +310,7 @@ export default function GradingTableClient({
         // Construct URL with classId derived from URL state
         const targetUrl = `/dashboard/grading?classId=${currentClassId}&week=${formattedDate}`;
         console.log(`[Grading Client] Navigating to URL: ${targetUrl}`);
-        router.push(targetUrl);
+        router.push(targetUrl); 
     }, [currentClassId, router]);
 
     const handlePreviousWeek = useCallback(() => {
@@ -334,7 +334,7 @@ export default function GradingTableClient({
             pendingUpdatesRef.current.forEach(cellKey => {
                 updates[cellKey] = cellNotesRef.current[cellKey] || '';
             });
-
+            
             setCellNotes(prev => ({ ...prev, ...updates }));
             pendingUpdatesRef.current.clear();
         }
@@ -350,7 +350,7 @@ export default function GradingTableClient({
     ) => {
         if (!currentClassId) {
             toast.error("Cannot save grade: Class ID is missing.");
-            return;
+            return; 
         }
         // Find if an assessment already exists for this cell
         const existingAssessmentIndex = assessments.findIndex(
@@ -462,10 +462,10 @@ export default function GradingTableClient({
     ) => {
         // Immediately update the ref (this is fast and doesn't trigger re-renders)
         cellNotesRef.current[cellKey] = newNotes;
-
+        
         // Mark this cell as needing a state update
         pendingUpdatesRef.current.add(cellKey);
-
+        
         // Queue a batched update using requestIdleCallback for better performance
         if (!updateQueuedRef.current) {
             updateQueuedRef.current = true;
@@ -480,21 +480,21 @@ export default function GradingTableClient({
         contentGroupId: number
     ) => {
         const cellKey = `${studentEnrollmentId}-${classCurriculumPlanId}`;
-
+        
         // Flush any pending updates first
         if (pendingUpdatesRef.current.has(cellKey)) {
             flushPendingUpdates();
         }
-
+        
         const currentNotes = cellNotesRef.current[cellKey] || '';
-
+        
         // Find existing assessment
         const existingAssessment = assessments.find(
             a => a.studentEnrollmentId === studentEnrollmentId &&
                 a.classCurriculumPlanId === classCurriculumPlanId &&
                 a.contentPointId === null
         );
-
+        
         // Check if notes have actually changed
         const existingNotes = existingAssessment?.notes || '';
         if (currentNotes !== existingNotes) {
@@ -520,10 +520,10 @@ export default function GradingTableClient({
     }
 
     return (
-        <div className="p-4 h-[calc(100vh-4rem)] flex flex-col">
+        <div className="p-4 space-y-4">
             {/* Header Section: Class Name, Week Navigation */}
-            <div className="flex justify-between items-center mb-4 flex-shrink-0">
-                {/* Use classData state */}
+            <div className="flex justify-between items-center">
+                 {/* Use classData state */}
                 <h1 className="text-xl font-semibold">
                     Grading: {classData?.name ?? 'Loading...'} ({classData?.calendarYear})
                 </h1>
@@ -549,7 +549,7 @@ export default function GradingTableClient({
                         <SelectContent>
                             {allWeeks.map((week, globalIndex) => {
                                 const weekStr = formatDate(week);
-
+                                
                                 // Find the term this week belongs to more accurately
                                 const term = terms.find(t => {
                                     // Calculate Monday of the week the term starts
@@ -576,7 +576,7 @@ export default function GradingTableClient({
                                         const diff = termStartMonday.getDate() - day + (day === 0 ? -6 : 1);
                                         termStartMonday.setDate(diff);
                                         termStartMonday.setHours(0, 0, 0, 0);
-                                        return w.getTime() >= termStartMonday.getTime();
+                                        return w.getTime() >= termStartMonday.getTime(); 
                                     });
 
                                     // Calculate week number relative to the start of the term weeks
@@ -604,112 +604,105 @@ export default function GradingTableClient({
                 </div>
             </div>
 
-            {/* Grading Table */}
+            {/* Grading Table */} 
             {/* Use plannedItems state and students state */}
             {(plannedItems.length > 0 && students.length > 0) ? (
-                <div className="border rounded-md flex-1 flex flex-col min-h-0">
-                    {/* Full height container for the table with vertical scroll */}
-                    <div className="flex-1 overflow-auto">
-                        <Table className="relative">
-                            <TableHeader>
-                                <TableRow>
-                                    {/* Student Column - Fixed width with sticky positioning */}
-                                    <TableHead
-                                        className="sticky left-0 sticky top-0 bg-background z-30 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider align-top border-r shadow-sm"
-                                        style={{
-                                            width: '200px',
-                                            minWidth: '200px',
-                                            maxWidth: '200px'
-                                        }}
-                                    >
-                                        Student
-                                    </TableHead>
+                <Table className="border">
+                    <TableHeader>
+                        <TableRow>
+                            {/* Student Column - Fixed width */}
+                            <TableHead
+                                className="sticky left-0 bg-background z-10 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider align-top"
+                                style={{
+                                    width: '200px',
+                                    minWidth: '200px',
+                                    maxWidth: '200px'
+                                }}
+                            >
+                                Student
+                            </TableHead>
 
-                                    {/* Planned Item Columns - Dynamic width with sticky positioning */}
-                                    {plannedItems.map((item) => (
-                                        <TableHead
+                            {/* Planned Item Columns - Dynamic width */}
+                            {plannedItems.map((item) => (
+                                <TableHead
+                                    key={item.id}
+                                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider align-top"
+                                    style={{
+                                        minWidth: '140px', // Minimum width for content
+                                        overflowWrap: 'break-word',
+                                        wordBreak: 'break-word',
+                                        whiteSpace: 'normal'
+                                    }}
+                                    title={item.contentGroup.name}
+                                >
+                                    {item.contentGroup.name}
+                                </TableHead>
+                            ))}
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody className="divide-y divide-gray-200 bg-white">
+                        {students.map((enrollment) => (
+                            <TableRow key={enrollment.id}>
+                                {/* Student Cell - Fixed width */}
+                                <TableCell
+                                    className="sticky left-0 bg-white z-10 px-4 py-2 text-sm font-medium align-top"
+                                    style={{
+                                        width: '200px',
+                                        minWidth: '200px',
+                                        maxWidth: '200px'
+                                    }}
+                                >
+                                    <div className="flex flex-col space-y-2">
+                                        {/* Left justify the button */}
+                                        <Link href={`/dashboard/students/${enrollment.student.id}?classId=${currentClassId}`} passHref>
+                                            <Button variant="outline" size="sm" className="w-full" style={{ textAlign: 'left', justifyContent: 'flex-start' }} >
+                                                <User className="mr-1 h-4 w-4" /> {enrollment.student.firstName} {enrollment.student.lastName}
+                                            </Button>
+                                        </Link>
+                                    </div>
+                                </TableCell>
+
+                                {/* Grading Cells - Dynamic width */}
+                                {plannedItems.map((item) => {
+                                    // Find assessment in local state
+                                    const existingAssessment = assessments.find(
+                                        a => a.studentEnrollmentId === enrollment.id &&
+                                            a.classCurriculumPlanId === item.id &&
+                                            a.contentPointId === null
+                                    );
+                                    // --- Log matching logic ---
+                                    console.log(`[GradingTable Client Cell] Trying to match: StudentEnrollmentId=${enrollment.id}, PlannedItemId=${item.id}`);
+                                    console.log(`[GradingTable Client Cell] Found Assessment:`, existingAssessment ? { id: existingAssessment.id, gradeId: existingAssessment.gradeScaleId } : null);
+                                    // --- End Logging ---
+                                    // Use state for the select value to reflect optimistic updates
+                                    const currentGradeScaleId = existingAssessment?.gradeScaleId;
+                                    const cellKey = `${enrollment.id}-${item.id}`;
+                                    const hasNotes = cellNotes[cellKey] || existingAssessment?.notes;
+
+                                    return (
+                                        <GradeCell
                                             key={item.id}
-                                            className="sticky top-0 bg-background z-20 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider align-top shadow-sm"
-                                            style={{
-                                                minWidth: '140px', // Minimum width for content
-                                                overflowWrap: 'break-word',
-                                                wordBreak: 'break-word',
-                                                whiteSpace: 'normal'
-                                            }}
-                                            title={item.contentGroup.name}
-                                        >
-                                            {item.contentGroup.name}
-                                        </TableHead>
-                                    ))}
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody className="divide-y divide-gray-200 bg-white">
-                                {students.map((enrollment) => (
-                                    <TableRow key={enrollment.id}>
-                                        {/* Student Cell - Fixed width */}
-                                        <TableCell
-                                            className="sticky left-0 bg-white z-10 px-4 py-2 text-sm font-medium align-top border-r"
-                                            style={{
-                                                width: '200px',
-                                                minWidth: '200px',
-                                                maxWidth: '200px'
-                                            }}
-                                        >
-                                            <div className="flex flex-col space-y-2">
-                                                {/* Left justify the button */}
-                                                <Link href={`/dashboard/students/${enrollment.student.id}?classId=${currentClassId}`} passHref>
-                                                    <Button variant="outline" size="sm" className="w-full" style={{ textAlign: 'left', justifyContent: 'flex-start' }} >
-                                                        <User className="mr-1 h-4 w-4" /> {enrollment.student.firstName} {enrollment.student.lastName}
-                                                    </Button>
-                                                </Link>
-                                            </div>
-                                        </TableCell>
-
-                                        {/* Grading Cells - Dynamic width */}
-                                        {plannedItems.map((item) => {
-                                            // Find assessment in local state
-                                            const existingAssessment = assessments.find(
-                                                a => a.studentEnrollmentId === enrollment.id &&
-                                                    a.classCurriculumPlanId === item.id &&
-                                                    a.contentPointId === null
-                                            );
-                                            // --- Log matching logic ---
-                                            console.log(`[GradingTable Client Cell] Trying to match: StudentEnrollmentId=${enrollment.id}, PlannedItemId=${item.id}`);
-                                            console.log(`[GradingTable Client Cell] Found Assessment:`, existingAssessment ? { id: existingAssessment.id, gradeId: existingAssessment.gradeScaleId } : null);
-                                            // --- End Logging ---
-                                            // Use state for the select value to reflect optimistic updates
-                                            const currentGradeScaleId = existingAssessment?.gradeScaleId;
-                                            const cellKey = `${enrollment.id}-${item.id}`;
-                                            const hasNotes = cellNotes[cellKey] || existingAssessment?.notes;
-
-                                            return (
-                                                <GradeCell
-                                                    key={item.id}
-                                                    enrollment={enrollment}
-                                                    item={item}
-                                                    currentGradeScaleId={currentGradeScaleId}
-                                                    hasNotes={hasNotes}
-                                                    gradeScales={gradeScales}
-                                                    isPending={isPending}
-                                                    onGradeChange={handleGradeChange}
-                                                    onDropdownClose={handleDropdownClose}
-                                                    onNotesChange={handleNotesChange}
-                                                    cellNotes={cellNotes}
-                                                />
-                                            );
-                                        })}
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </div>
+                                            enrollment={enrollment}
+                                            item={item}
+                                            currentGradeScaleId={currentGradeScaleId}
+                                            hasNotes={hasNotes}
+                                            gradeScales={gradeScales}
+                                            isPending={isPending}
+                                            onGradeChange={handleGradeChange}
+                                            onDropdownClose={handleDropdownClose}
+                                            onNotesChange={handleNotesChange}
+                                            cellNotes={cellNotes}
+                                        />
+                                    );
+                                })}
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
             ) : (
-                <div className="flex-1 flex items-center justify-center">
-                    <p className="text-muted-foreground text-center py-4">
-                        {plannedItems.length === 0 ? "No content planned for this week." : "No students found in this class."}
-                    </p>
-                </div>
+                <p className="text-muted-foreground text-center py-4">
+                    {plannedItems.length === 0 ? "No content planned for this week." : "No students found in this class."}
+                </p>
             )}
         </div>
     );
