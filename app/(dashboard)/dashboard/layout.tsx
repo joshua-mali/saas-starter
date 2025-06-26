@@ -2,13 +2,13 @@
 
 import { Button } from "@/components/ui/button";
 import {
-  BookOpen,
-  ClipboardCheck,
-  HomeIcon,
-  LayoutPanelLeft,
-  Menu,
-  Settings,
-  UsersRound,
+    BookOpen,
+    ClipboardCheck,
+    HomeIcon,
+    LayoutPanelLeft,
+    Menu,
+    Settings,
+    UsersRound,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -34,7 +34,7 @@ export default function DashboardLayout({
   ];
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-68px)] max-w-screen-2xl mx-auto w-full">
+    <div className="flex flex-col h-[calc(100dvh-68px)] w-full">
       {/* Mobile header */}
       <div className="lg:hidden flex items-center justify-between bg-white border-b border-gray-200 p-4">
         <div className="flex items-center">

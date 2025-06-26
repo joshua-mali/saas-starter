@@ -520,9 +520,9 @@ export default function GradingTableClient({
     }
 
     return (
-        <div className="p-4 space-y-4">
+        <div className="space-y-4">
             {/* Header Section: Class Name, Week Navigation */}
-            <div className="flex justify-between items-center">
+            <div className="flex flex-wrap justify-between items-center gap-4 px-4 py-2">
                  {/* Use classData state */}
                 <h1 className="text-xl font-semibold">
                     Grading: {classData?.name ?? 'Loading...'} ({classData?.calendarYear})
@@ -607,39 +607,41 @@ export default function GradingTableClient({
             {/* Grading Table */} 
             {/* Use plannedItems state and students state */}
             {(plannedItems.length > 0 && students.length > 0) ? (
-                <Table className="border">
-                    <TableHeader>
-                        <TableRow>
-                            {/* Student Column - Fixed width */}
-                            <TableHead
-                                className="sticky left-0 bg-background z-10 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider align-top"
-                                style={{
-                                    width: '200px',
-                                    minWidth: '200px',
-                                    maxWidth: '200px'
-                                }}
-                            >
-                                Student
-                            </TableHead>
-
-                            {/* Planned Item Columns - Dynamic width */}
-                            {plannedItems.map((item) => (
+                <div className="w-full overflow-x-auto">
+                    <Table className="border w-full min-w-full table-fixed">
+                        <TableHeader>
+                            <TableRow>
+                                {/* Student Column - Fixed width */}
                                 <TableHead
-                                    key={item.id}
-                                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider align-top"
+                                    className="sticky left-0 bg-background z-10 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider align-top border-r"
                                     style={{
-                                        minWidth: '140px', // Minimum width for content
-                                        overflowWrap: 'break-word',
-                                        wordBreak: 'break-word',
-                                        whiteSpace: 'normal'
+                                        width: '200px',
+                                        minWidth: '200px',
+                                        maxWidth: '200px'
                                     }}
-                                    title={item.contentGroup.name}
                                 >
-                                    {item.contentGroup.name}
+                                    Student
                                 </TableHead>
-                            ))}
-                        </TableRow>
-                    </TableHeader>
+
+                                {/* Planned Item Columns - Equal width distribution */}
+                                {plannedItems.map((item, index) => (
+                                    <TableHead
+                                        key={item.id}
+                                        className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider align-top"
+                                        style={{
+                                            width: `calc((100% - 200px) / ${plannedItems.length})`,
+                                            minWidth: '140px',
+                                            overflowWrap: 'break-word',
+                                            wordBreak: 'break-word',
+                                            whiteSpace: 'normal'
+                                        }}
+                                        title={item.contentGroup.name}
+                                    >
+                                        {item.contentGroup.name}
+                                    </TableHead>
+                                ))}
+                            </TableRow>
+                        </TableHeader>
                     <TableBody className="divide-y divide-gray-200 bg-white">
                         {students.map((enrollment) => (
                             <TableRow key={enrollment.id}>
@@ -660,7 +662,7 @@ export default function GradingTableClient({
                                     </Link>
                                 </TableCell>
 
-                                {/* Grading Cells - Dynamic width */}
+                                {/* Grading Cells - Equal width distribution */}
                                 {plannedItems.map((item) => {
                                     // Find assessment in local state
                                     const existingAssessment = assessments.find(
@@ -678,25 +680,37 @@ export default function GradingTableClient({
                                     const hasNotes = cellNotes[cellKey] || existingAssessment?.notes;
 
                                     return (
-                                        <GradeCell
+                                        <TableCell
                                             key={item.id}
-                                            enrollment={enrollment}
-                                            item={item}
-                                            currentGradeScaleId={currentGradeScaleId}
-                                            hasNotes={hasNotes}
-                                            gradeScales={gradeScales}
-                                            isPending={isPending}
-                                            onGradeChange={handleGradeChange}
-                                            onDropdownClose={handleDropdownClose}
-                                            onNotesChange={handleNotesChange}
-                                            cellNotes={cellNotes}
-                                        />
+                                            className="px-4 py-2 text-sm align-top"
+                                            style={{
+                                                width: `calc((100% - 200px) / ${plannedItems.length})`,
+                                                minWidth: '140px',
+                                                overflowWrap: 'break-word',
+                                                wordBreak: 'break-word',
+                                                whiteSpace: 'normal'
+                                            }}
+                                        >
+                                            <GradeCell
+                                                enrollment={enrollment}
+                                                item={item}
+                                                currentGradeScaleId={currentGradeScaleId}
+                                                hasNotes={hasNotes}
+                                                gradeScales={gradeScales}
+                                                isPending={isPending}
+                                                onGradeChange={handleGradeChange}
+                                                onDropdownClose={handleDropdownClose}
+                                                onNotesChange={handleNotesChange}
+                                                cellNotes={cellNotes}
+                                            />
+                                        </TableCell>
                                     );
                                 })}
-                            </TableRow>
+                                                                </TableRow>
                         ))}
                     </TableBody>
                 </Table>
+                </div>
             ) : (
                 <p className="text-muted-foreground text-center py-4">
                     {plannedItems.length === 0 ? "No content planned for this week." : "No students found in this class."}
