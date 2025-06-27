@@ -159,7 +159,7 @@ export function UserMenu() {
                 console.log("Avatar image failed to load");
               }}
             />
-            <AvatarFallback className="bg-gray-600 text-white">
+            <AvatarFallback className="bg-[var(--color-charcoal)] text-white">
               {userInitials}
             </AvatarFallback>
           </Avatar>

@@ -56,17 +56,17 @@ function getWeeksBetween(startDate: Date, endDate: Date): Date[] {
     const diff = currentMonday.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
     currentMonday = new Date(currentMonday.setDate(diff));
     currentMonday.setHours(0, 0, 0, 0);
-    
+
     const finalEndDate = new Date(endDate);
     finalEndDate.setHours(0, 0, 0, 0);
-    
+
     while (currentMonday <= finalEndDate) {
-      // Remove the filtering condition - always add the Monday within the loop range
-      // if (currentMonday.getTime() >= termStartDate.getTime()) { 
+        // Remove the filtering condition - always add the Monday within the loop range
+        // if (currentMonday.getTime() >= termStartDate.getTime()) { 
         weeks.push(new Date(currentMonday));
-      // }
-      // Increment to the next Monday
-      currentMonday.setDate(currentMonday.getDate() + 7); 
+        // }
+        // Increment to the next Monday
+        currentMonday.setDate(currentMonday.getDate() + 7);
     }
     return weeks;
 }
@@ -91,7 +91,7 @@ async function getClassDetails(classId: string, userId: string): Promise<(Class 
     const result = await db.query.classes.findFirst({
         where: eq(classes.id, classId),
         with: {
-            stage: true, 
+            stage: true,
         }
     });
     // Ensure teamId is returned if needed elsewhere
@@ -100,9 +100,9 @@ async function getClassDetails(classId: string, userId: string): Promise<(Class 
 
 // OPTIMIZED: Single query to get all grading data
 async function getGradingData(
-    classId: string, 
-    teamId: number, 
-    calendarYear: number, 
+    classId: string,
+    teamId: number,
+    calendarYear: number,
     weekStartDate: Date
 ): Promise<{
     students: (StudentEnrollment & { student: Student })[];
@@ -124,10 +124,10 @@ async function getGradingData(
             },
             orderBy: (enrollments, { asc }) => [asc(enrollments.studentId)],
         }),
-        
+
         // Get grade scales
         db.select().from(gradeScalesTable).orderBy(gradeScalesTable.numericValue),
-        
+
         // Get planned items for the week
         db.query.classCurriculumPlan.findMany({
             where: and(
@@ -141,11 +141,11 @@ async function getGradingData(
             },
             orderBy: (planItems, { asc }) => [asc(planItems.contentGroupId)],
         }),
-        
+
         // Get terms for the year
         db.select().from(termsTable)
-          .where(and(eq(termsTable.teamId, teamId), eq(termsTable.calendarYear, calendarYear)))
-          .orderBy(termsTable.termNumber)
+            .where(and(eq(termsTable.teamId, teamId), eq(termsTable.calendarYear, calendarYear)))
+            .orderBy(termsTable.termNumber)
     ]);
 
     // Get assessments only if we have students and planned items
@@ -203,7 +203,7 @@ export default async function GradingPage({ searchParams: searchParamsPromise }:
         if (allTeamClasses.some(c => c.id === rawClassId)) {
             classId = rawClassId;
         } else {
-             console.warn(`Invalid or unauthorized classId requested: ${rawClassId}.`);
+            console.warn(`Invalid or unauthorized classId requested: ${rawClassId}.`);
         }
     }
     if (classId === null && userTaughtClasses.length > 0) {
@@ -211,8 +211,17 @@ export default async function GradingPage({ searchParams: searchParamsPromise }:
     }
     if (classId === null) {
         return (
-            <div className="p-4">
-                Please select a class from the dropdown above to view grading.
+            <div className="p-4 text-center">
+                <p>Please select a class from the dropdown above to view the grading board.</p>
+                {allTeamClasses.length > 0 ? (
+                    <p className="text-sm text-muted-foreground mt-2">
+                        (You can select any class associated with your team.)
+                    </p>
+                ) : (
+                    <p className="text-sm text-muted-foreground mt-2">
+                        (No classes found for your team.)
+                    </p>
+                )}
             </div>
         );
     }
@@ -256,14 +265,14 @@ export default async function GradingPage({ searchParams: searchParamsPromise }:
     if (!wasWeekRequested && plannedItemsData.length === 0 && allWeeks.length > 0) {
         console.log(`[GradingPage Server] No items for current week, finding fallback.`);
         const potentialFallbackWeeks = allWeeks.filter(w => w.getTime() <= targetWeekDate.getTime());
-        const fallbackWeekDate = potentialFallbackWeeks.length > 0 
-            ? potentialFallbackWeeks[potentialFallbackWeeks.length - 1] 
+        const fallbackWeekDate = potentialFallbackWeeks.length > 0
+            ? potentialFallbackWeeks[potentialFallbackWeeks.length - 1]
             : (allWeeks.length > 0 ? allWeeks[allWeeks.length - 1] : null);
 
         if (fallbackWeekDate && fallbackWeekDate.getTime() !== targetWeekDate.getTime()) {
             console.log(`[GradingPage Server] Falling back to week: ${fallbackWeekDate.toISOString()}`);
             finalTargetWeekDate = fallbackWeekDate;
-            
+
             // Re-fetch for fallback week
             const fallbackData = await getGradingData(classId, classData.teamId, classData.calendarYear, finalTargetWeekDate);
             finalPlannedItems = fallbackData.plannedItems;
