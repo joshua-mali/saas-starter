@@ -55,6 +55,13 @@
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
+
+  /* Color Palette from Brand Guide */
+  --color-brand: #FD4101; /* blood-orange */
+  --color-charcoal: #333333;
+  --color-ivory: #FFFAE5;
+  --color-dark-grey: #212121;
+  --color-white: #FFFFFF;
 }
 
 /*

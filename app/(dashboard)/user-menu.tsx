@@ -4,57 +4,120 @@ import { signOut } from '@/app/(login)/actions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { createClient } from '@/lib/supabase/client'; // Use client!
+import { createClient } from '@/lib/supabase/client';
 import type { User } from '@supabase/supabase-js';
 import { Home, LogOut } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 export function UserMenu() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const supabase = createClient();
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const { data: { user: fetchedUser } } = await supabase.auth.getUser();
-        setUser(fetchedUser);
-      } catch (error) {
-        console.error("Error fetching user:", error);
+  // Memoize the user fetching function to prevent unnecessary re-renders
+  const fetchUser = useCallback(async () => {
+    try {
+      const { data: { user: fetchedUser }, error: fetchError } = await supabase.auth.getUser();
+      
+      if (fetchError) {
+        console.error("Error fetching user:", fetchError);
+        setError(fetchError.message);
         setUser(null);
-      } finally {
-        setLoading(false);
+      } else {
+        setUser(fetchedUser);
+        setError(null);
       }
-    };
+    } catch (error) {
+      console.error("Unexpected error fetching user:", error);
+      setError("Failed to load user");
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase.auth]);
+
+  useEffect(() => {
+    // Initial user fetch
     fetchUser();
 
+    // Set up auth state listener with improved error handling
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        const { data: { user: updatedUser } } = await supabase.auth.getUser();
-        setUser(updatedUser);
+        try {
+          // Handle different auth events
+          if (event === 'SIGNED_OUT') {
+            setUser(null);
+            setError(null);
+            setLoading(false);
+          } else if (event === 'SIGNED_IN' && session?.user) {
+            setUser(session.user);
+            setError(null);
+            setLoading(false);
+          } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+            setUser(session.user);
+            setError(null);
+          } else {
+            // For other events, fetch user to ensure we have the latest state
+            await fetchUser();
+          }
+        } catch (error) {
+          console.error("Error in auth state change:", error);
+          setError("Authentication error");
+          setUser(null);
+          setLoading(false);
+        }
       }
     );
 
     return () => {
       authListener?.subscription.unsubscribe();
     };
-  }, [supabase]);
+  }, [fetchUser]);
 
   async function handleSignOut() {
-    await signOut();
+    try {
+      setLoading(true);
+      await signOut();
+    } catch (error) {
+      console.error("Error signing out:", error);
+      setError("Failed to sign out");
+    } finally {
+      setLoading(false);
+    }
   }
 
+  // Show loading state
   if (loading) {
     return <div className="h-9 w-9 rounded-full bg-gray-200 animate-pulse" />;
   }
 
+  // Show error state with retry option
+  if (error && !user) {
+    return (
+      <Button
+        onClick={() => {
+          setError(null);
+          setLoading(true);
+          fetchUser();
+        }}
+        variant="outline"
+        size="sm"
+        className="text-xs"
+      >
+        Retry
+      </Button>
+    );
+  }
+
+  // Show unauthenticated state
   if (!user) {
     return (
       <>
@@ -74,22 +137,33 @@ export function UserMenu() {
     );
   }
 
-  const userName = user.user_metadata?.name || user.email;
+  // Extract user data with better fallbacks
+  const userName = user.user_metadata?.full_name || user.user_metadata?.name || user.email || 'User';
   const userInitials = userName
     ?.split(' ')
     .map((n: string) => n[0])
     .join('')
-    .toUpperCase() || '';
+    .toUpperCase()
+    .slice(0, 2) || 'U'; // Limit to 2 characters and provide fallback
 
   return (
     <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
-      <DropdownMenuTrigger>
-        <Avatar className="cursor-pointer size-9">
-          <AvatarImage src={user.user_metadata?.avatar_url} alt={userName || ''} />
-          <AvatarFallback>
-            {userInitials}
-          </AvatarFallback>
-        </Avatar>
+      <DropdownMenuTrigger asChild>
+        <button className="focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 rounded-full">
+          <Avatar className="cursor-pointer size-9">
+            <AvatarImage 
+              src={user.user_metadata?.avatar_url} 
+              alt={`${userName}'s avatar`}
+              onError={() => {
+                // Handle image loading errors gracefully
+                console.log("Avatar image failed to load");
+              }}
+            />
+            <AvatarFallback className="bg-gray-600 text-white">
+              {userInitials}
+            </AvatarFallback>
+          </Avatar>
+        </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="flex flex-col gap-1">
         <DropdownMenuItem className="cursor-pointer">
