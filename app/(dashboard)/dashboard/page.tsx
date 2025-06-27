@@ -4,16 +4,32 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
 import { MessageSquare, Plus, Save, StickyNote, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { createGeneralNote } from './notes/actions'
+import { createGeneralNote, createStudentComment } from './notes/actions'
 
 interface QuickNoteFormData {
   title: string
   content: string
+}
+
+interface QuickCommentFormData {
+  studentId: string
+  classId: string
+  title: string
+  content: string
+}
+
+interface Student {
+  id: string
+  firstName: string
+  lastName: string
+  classId: string
+  className: string
 }
 
 export default function DashboardPage() {
@@ -21,6 +37,7 @@ export default function DashboardPage() {
   const [user, setUser] = useState<any>(null)
   const [teamData, setTeamData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [students, setStudents] = useState<Student[]>([])
   
   const [showQuickNoteForm, setShowQuickNoteForm] = useState(false)
   const [quickNoteData, setQuickNoteData] = useState<QuickNoteFormData>({
@@ -28,6 +45,15 @@ export default function DashboardPage() {
     content: ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const [showQuickCommentForm, setShowQuickCommentForm] = useState(false)
+  const [quickCommentData, setQuickCommentData] = useState<QuickCommentFormData>({
+    studentId: '',
+    classId: '',
+    title: '',
+    content: ''
+  })
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false)
 
   useEffect(() => {
     async function fetchData() {
@@ -41,9 +67,10 @@ export default function DashboardPage() {
         }
         
         setUser(currentUser)
-        // For now, we'll just set basic user data
-        // The team management functionality can be added later if needed
         setTeamData({ name: `${currentUser.user_metadata?.full_name || currentUser.email}'s Team` })
+        
+        // Fetch students for the comment selector
+        await fetchStudents()
       } catch (error) {
         console.error('Error fetching user data:', error)
         toast.error('Error loading dashboard')
@@ -54,6 +81,18 @@ export default function DashboardPage() {
 
     fetchData()
   }, [router])
+
+  const fetchStudents = async () => {
+    try {
+      const response = await fetch('/api/students')
+      if (response.ok) {
+        const studentsData = await response.json()
+        setStudents(studentsData)
+      }
+    } catch (error) {
+      console.error('Error fetching students:', error)
+    }
+  }
 
   const handleGoToNotes = () => {
     router.push('/dashboard/notes')
@@ -84,13 +123,62 @@ export default function DashboardPage() {
       } else {
         toast.success('Note created successfully!')
         handleCancelQuickNote()
-        // Optionally redirect to notes page
         router.push('/dashboard/notes')
       }
     } catch (error) {
       toast.error('Error creating note')
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleQuickComment = () => {
+    setShowQuickCommentForm(true)
+  }
+
+  const handleCancelQuickComment = () => {
+    setShowQuickCommentForm(false)
+    setQuickCommentData({
+      studentId: '',
+      classId: '',
+      title: '',
+      content: ''
+    })
+  }
+
+  const handleStudentSelect = (studentId: string) => {
+    const selectedStudent = students.find(s => s.id === studentId)
+    if (selectedStudent) {
+      setQuickCommentData(prev => ({
+        ...prev,
+        studentId: selectedStudent.id,
+        classId: selectedStudent.classId
+      }))
+    }
+  }
+
+  const handleSubmitQuickComment = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setIsSubmittingComment(true)
+
+    try {
+      const result = await createStudentComment({
+        studentId: quickCommentData.studentId,
+        classId: quickCommentData.classId,
+        title: quickCommentData.title,
+        content: quickCommentData.content
+      })
+
+      if (result.error) {
+        toast.error('Failed to create comment', { description: result.error })
+      } else {
+        toast.success('Student comment created successfully!')
+        handleCancelQuickComment()
+      }
+    } catch (error) {
+      toast.error('Error creating comment')
+    } finally {
+      setIsSubmittingComment(false)
     }
   }
 
@@ -219,15 +307,84 @@ export default function DashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Record behavioral observations, parent meeting notes, or general comments about students that are unrelated to their academic grades.
-                </p>
-                <Button onClick={handleGoToStudents} className="w-full" variant="outline">
-                  <MessageSquare className="h-4 w-4 mr-2" />
-                  Go to Students
-                </Button>
-              </div>
+              {showQuickCommentForm ? (
+                <form onSubmit={handleSubmitQuickComment} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="studentSelect">Select Student</Label>
+                    <Select onValueChange={handleStudentSelect} required>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a student..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {students.map((student) => (
+                          <SelectItem key={student.id} value={student.id}>
+                            {student.firstName} {student.lastName} ({student.className})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="commentTitle">Title</Label>
+                    <Input
+                      id="commentTitle"
+                      value={quickCommentData.title}
+                      onChange={(e) => setQuickCommentData(prev => ({ ...prev, title: e.target.value }))}
+                      placeholder="Comment title..."
+                      required
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="commentContent">Comment</Label>
+                    <textarea
+                      id="commentContent"
+                      value={quickCommentData.content}
+                      onChange={(e) => setQuickCommentData(prev => ({ ...prev, content: e.target.value }))}
+                      placeholder="Enter your comment about this student..."
+                      rows={4}
+                      required
+                      className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <Button 
+                      type="submit" 
+                      disabled={isSubmittingComment || !quickCommentData.studentId} 
+                      className="flex-1"
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      {isSubmittingComment ? 'Saving...' : 'Save Comment'}
+                    </Button>
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={handleCancelQuickComment}
+                      disabled={isSubmittingComment}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Record behavioral observations, parent meeting notes, or general comments about students that are unrelated to their academic grades.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button onClick={handleQuickComment} variant="outline" className="flex-1">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Quick Comment
+                    </Button>
+                    <Button onClick={handleGoToStudents} variant="outline" className="flex-1">
+                      Go to Students
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 

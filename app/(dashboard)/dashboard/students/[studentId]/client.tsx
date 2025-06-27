@@ -6,9 +6,15 @@ import {
     AccordionItem,
     AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import type { Class, Stage, Student } from '@/lib/db/schema';
-import React from 'react';
+import { Plus, Save, X } from 'lucide-react';
+import React, { useState, useTransition } from 'react';
+import { toast } from 'sonner';
+import { createStudentComment } from '../../notes/actions';
 
 // Reuse the type defined in page.tsx for the processed data
 // (Ideally, move this type definition to a shared file)
@@ -146,6 +152,10 @@ export default function StudentOverviewClient({
     studentComments
 }: StudentOverviewClientProps) {
 
+    const [isCreatingComment, setIsCreatingComment] = useState(false);
+    const [commentForm, setCommentForm] = useState({ title: '', content: '' });
+    const [isPending, startTransition] = useTransition();
+
     // Helper function to format dates for display
     const formatDisplayDate = (date: Date): string => {
         return new Intl.DateTimeFormat('en-AU', {
@@ -153,6 +163,42 @@ export default function StudentOverviewClient({
             month: '2-digit',
             year: 'numeric'
         }).format(new Date(date));
+    };
+
+    const handleCreateComment = () => {
+        setIsCreatingComment(true);
+        setCommentForm({ title: '', content: '' });
+    };
+
+    const handleCancelComment = () => {
+        setIsCreatingComment(false);
+        setCommentForm({ title: '', content: '' });
+    };
+
+    const handleSubmitComment = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        
+        startTransition(async () => {
+            try {
+                const result = await createStudentComment({
+                    studentId: student.id,
+                    classId: classData.id,
+                    title: commentForm.title,
+                    content: commentForm.content
+                });
+
+                if (result.error) {
+                    toast.error('Failed to create comment', { description: result.error });
+                } else {
+                    toast.success('Comment created successfully!');
+                    handleCancelComment();
+                    // Refresh the page to show the new comment
+                    window.location.reload();
+                }
+            } catch (error) {
+                toast.error('Error creating comment');
+            }
+        });
     };
 
     return (
@@ -267,9 +313,71 @@ export default function StudentOverviewClient({
                 {/* Bottom Right: General Comments */}
                 <Card className="flex flex-col">
                     <CardHeader>
-                        <CardTitle className="text-base">General Comments</CardTitle>
+                        <div className="flex items-center justify-between">
+                            <CardTitle className="text-base">General Comments</CardTitle>
+                            {!isCreatingComment && (
+                                <Button 
+                                    size="sm" 
+                                    onClick={handleCreateComment}
+                                    disabled={isPending}
+                                >
+                                    <Plus className="h-3 w-3 mr-1" />
+                                    Add
+                                </Button>
+                            )}
+                        </div>
                     </CardHeader>
                     <CardContent className="overflow-y-auto">
+                        {/* Comment Creation Form */}
+                        {isCreatingComment && (
+                            <div className="mb-4 p-3 border rounded-md bg-gray-50">
+                                <form onSubmit={handleSubmitComment} className="space-y-3">
+                                    <div className="space-y-1">
+                                        <Label htmlFor="commentTitle" className="text-xs">Title</Label>
+                                        <Input
+                                            id="commentTitle"
+                                            value={commentForm.title}
+                                            onChange={(e) => setCommentForm(prev => ({ ...prev, title: e.target.value }))}
+                                            placeholder="Comment title..."
+                                            required
+                                            className="text-sm"
+                                        />
+                                    </div>
+                                    
+                                    <div className="space-y-1">
+                                        <Label htmlFor="commentContent" className="text-xs">Comment</Label>
+                                        <textarea
+                                            id="commentContent"
+                                            value={commentForm.content}
+                                            onChange={(e) => setCommentForm(prev => ({ ...prev, content: e.target.value }))}
+                                            placeholder="Enter your comment about this student..."
+                                            rows={3}
+                                            required
+                                            className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                        />
+                                    </div>
+                                    
+                                    <div className="flex gap-2">
+                                        <Button type="submit" size="sm" disabled={isPending}>
+                                            <Save className="h-3 w-3 mr-1" />
+                                            {isPending ? 'Saving...' : 'Save'}
+                                        </Button>
+                                        <Button 
+                                            type="button" 
+                                            variant="outline" 
+                                            size="sm"
+                                            onClick={handleCancelComment}
+                                            disabled={isPending}
+                                        >
+                                            <X className="h-3 w-3 mr-1" />
+                                            Cancel
+                                        </Button>
+                                    </div>
+                                </form>
+                            </div>
+                        )}
+
+                        {/* Existing Comments */}
                         {studentComments.length > 0 ? (
                             <div className="space-y-3">
                                 {studentComments.map(comment => (
@@ -288,14 +396,18 @@ export default function StudentOverviewClient({
                                     </div>
                                 ))}
                             </div>
-                        ) : (
+                        ) : !isCreatingComment ? (
                             <div className="text-center p-4">
                                 <p className="text-muted-foreground text-sm mb-2">No general comments for this student.</p>
-                                <p className="text-xs text-muted-foreground">
+                                <p className="text-xs text-muted-foreground mb-3">
                                     General comments can be added to record observations, notes, and other information about the student.
                                 </p>
+                                <Button size="sm" onClick={handleCreateComment}>
+                                    <Plus className="h-3 w-3 mr-1" />
+                                    Add First Comment
+                                </Button>
                             </div>
-                        )}
+                        ) : null}
                     </CardContent>
                 </Card>
 
