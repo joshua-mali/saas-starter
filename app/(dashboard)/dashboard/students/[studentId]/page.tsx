@@ -21,6 +21,7 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { and, eq } from 'drizzle-orm';
 import { notFound, redirect } from 'next/navigation';
+import { getStudentComments } from '../../notes/actions';
 import StudentOverviewClient from './client'; // Import the client component
 
 // TODO: Define Authorization check function (or import if shared)
@@ -451,6 +452,15 @@ export default async function StudentOverviewPage({
     const { topGroups, bottomGroups } = extractTopBottomGroups(processedGrades);
     const gradeComments = extractGradeComments(hierarchyData, assessmentsData, gradeScalesData);
 
+    // --- Fetch Student Comments ---
+    let studentComments: Awaited<ReturnType<typeof getStudentComments>> = [];
+    try {
+        studentComments = await getStudentComments(studentId, classId);
+    } catch (error) {
+        console.error('Error fetching student comments:', error);
+        // Continue without student comments if there's an error
+    }
+
     // --- Pass to Client Component --- 
     return (
         <div className="p-4">
@@ -468,7 +478,8 @@ export default async function StudentOverviewPage({
                 topContentGroups={topGroups}
                 bottomContentGroups={bottomGroups}
                 gradeComments={gradeComments}
-             />
+                studentComments={studentComments}
+            />
         </div>
     );
 }

@@ -44,6 +44,14 @@ type GradeComment = {
     gradeScaleId: number | null;
 };
 
+type StudentComment = {
+    id: string;
+    title: string | null;
+    content: string;
+    createdAt: Date;
+    updatedAt: Date;
+};
+
 interface StudentOverviewClientProps {
     student: Student;
     classData: Class & { stage: Stage | null };
@@ -51,6 +59,7 @@ interface StudentOverviewClientProps {
     topContentGroups: RankedGroup[]; // Add top groups prop
     bottomContentGroups: RankedGroup[]; // Add bottom groups prop
     gradeComments: GradeComment[]; // Add grade comments prop
+    studentComments: StudentComment[]; // Add student comments prop
 }
 
 // Helper to format the average grade for display
@@ -133,7 +142,8 @@ export default function StudentOverviewClient({
     structuredGrades,
     topContentGroups,
     bottomContentGroups,
-    gradeComments
+    gradeComments,
+    studentComments
 }: StudentOverviewClientProps) {
 
     // Helper function to format dates for display
@@ -147,23 +157,32 @@ export default function StudentOverviewClient({
 
     return (
         <div className="flex flex-col h-[calc(100vh-200px)]">
-            <div className="flex-1 overflow-y-auto border rounded-md mb-4">
-                <Accordion type="multiple" className="w-full p-2">
-                    {Object.values(structuredGrades).map(subjectNode => (
-                        <RenderHierarchyNode key={`subject-${subjectNode.id}`} node={subjectNode} level={0} />
-                    ))}
-                    {Object.keys(structuredGrades).length === 0 && (
-                        <p className="text-muted-foreground text-center p-4">No curriculum data found for this class's stage.</p>
-                    )}
-                </Accordion>
-            </div>
+            {/* 2x2 Grid Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
+                
+                {/* Top Left: Grade Breakdown */}
+                <Card className="flex flex-col">
+                    <CardHeader>
+                        <CardTitle className="text-base">Grade Breakdown</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex-1 overflow-y-auto">
+                        <Accordion type="multiple" className="w-full">
+                            {Object.values(structuredGrades).map(subjectNode => (
+                                <RenderHierarchyNode key={`subject-${subjectNode.id}`} node={subjectNode} level={0} />
+                            ))}
+                            {Object.keys(structuredGrades).length === 0 && (
+                                <p className="text-muted-foreground text-center p-4">No curriculum data found for this class's stage.</p>
+                            )}
+                        </Accordion>
+                    </CardContent>
+                </Card>
 
-            <div className="flex-shrink-0 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card>
+                {/* Top Right: Performance Highlights */}
+                <Card className="flex flex-col">
                     <CardHeader>
                         <CardTitle className="text-base">Performance Highlights</CardTitle>
                     </CardHeader>
-                    <CardContent className="text-sm space-y-4">
+                    <CardContent className="text-sm space-y-4 overflow-y-auto">
                         <div>
                             <h4 className="font-semibold mb-1">Top 3 Content Groups</h4>
                             {topContentGroups.length > 0 ? (
@@ -181,14 +200,14 @@ export default function StudentOverviewClient({
                                 <p className="text-muted-foreground">Not enough data.</p>
                             )}
                         </div>
-                         <div>
+                        <div>
                             <h4 className="font-semibold mb-1">Bottom 3 Content Groups</h4>
-                             {bottomContentGroups.length > 0 ? (
+                            {bottomContentGroups.length > 0 ? (
                                 <ul className="list-disc list-inside space-y-1">
                                     {bottomContentGroups.map(cg => (
                                         <li key={`bottom-${cg.id}`}>
                                             {cg.name} 
-                                             <span className="text-muted-foreground ml-1">
+                                            <span className="text-muted-foreground ml-1">
                                                 ({cg.gradeName ?? `Avg: ${formatAverage(cg.averageGrade)}`})
                                             </span>
                                         </li>
@@ -201,13 +220,14 @@ export default function StudentOverviewClient({
                     </CardContent>
                 </Card>
 
-                <Card>
+                {/* Bottom Left: Grade Comments */}
+                <Card className="flex flex-col">
                     <CardHeader>
                         <CardTitle className="text-base">Grade Comments</CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="overflow-y-auto">
                         {gradeComments.length > 0 ? (
-                            <div className="space-y-3 max-h-96 overflow-y-auto">
+                            <div className="space-y-3">
                                 {gradeComments.map(comment => (
                                     <div key={comment.id} className="border-l-2 border-blue-200 pl-3 pb-2">
                                         <div className="flex items-start justify-between mb-1">
@@ -235,7 +255,6 @@ export default function StudentOverviewClient({
                                         <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded text-left whitespace-pre-wrap">
                                             {comment.comment}
                                         </p>
-
                                     </div>
                                 ))}
                             </div>
@@ -244,6 +263,42 @@ export default function StudentOverviewClient({
                         )}
                     </CardContent>
                 </Card>
+
+                {/* Bottom Right: General Comments */}
+                <Card className="flex flex-col">
+                    <CardHeader>
+                        <CardTitle className="text-base">General Comments</CardTitle>
+                    </CardHeader>
+                    <CardContent className="overflow-y-auto">
+                        {studentComments.length > 0 ? (
+                            <div className="space-y-3">
+                                {studentComments.map(comment => (
+                                    <div key={comment.id} className="border-l-2 border-green-200 pl-3 pb-2">
+                                        <div className="flex items-start justify-between mb-1">
+                                            <h5 className="font-medium text-sm">
+                                                {comment.title || 'General Comment'}
+                                            </h5>
+                                            <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">
+                                                {formatDisplayDate(comment.updatedAt)}
+                                            </span>
+                                        </div>
+                                        <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded text-left whitespace-pre-wrap">
+                                            {comment.content}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center p-4">
+                                <p className="text-muted-foreground text-sm mb-2">No general comments for this student.</p>
+                                <p className="text-xs text-muted-foreground">
+                                    General comments can be added to record observations, notes, and other information about the student.
+                                </p>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
             </div>
         </div>
     );

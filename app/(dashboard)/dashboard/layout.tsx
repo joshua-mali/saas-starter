@@ -2,13 +2,14 @@
 
 import { Button } from "@/components/ui/button";
 import {
-    BookOpen,
-    ClipboardCheck,
-    HomeIcon,
-    LayoutPanelLeft,
-    Menu,
-    Settings,
-    UsersRound,
+  BookOpen,
+  ClipboardCheck,
+  HomeIcon,
+  LayoutPanelLeft,
+  Menu,
+  Settings,
+  StickyNote,
+  UsersRound,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -30,6 +31,7 @@ export default function DashboardLayout({
     { href: "/dashboard/planning", icon: LayoutPanelLeft, label: "Planning" },
     { href: "/dashboard/grading", icon: ClipboardCheck, label: "Grading" },
     { href: "/dashboard/students", icon: UsersRound, label: "Students" },
+    { href: "/dashboard/notes", icon: StickyNote, label: "Notes" },
     { href: "/dashboard/settings", icon: Settings, label: "Settings" },
   ];
 
