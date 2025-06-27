@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { type ActionState } from '@/lib/auth/middleware';
 import { Loader2 } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useActionState } from 'react';
@@ -40,8 +41,16 @@ export function Login({ mode = 'signin', inviteToken, teamId, role }: LoginProps
   return (
     <div className="flex min-h-full flex-1 flex-col justify-center px-6 py-12 lg:px-8">
        <div className="sm:mx-auto sm:w-full sm:max-w-sm">
-        {/* Placeholder for Logo */}
-         <img className="mx-auto h-10 w-auto" src="https://tailwindui.com/img/logos/mark.svg?color=indigo&shade=600" alt="MALI-Ed" />
+        {/* MALI Ed Logo */}
+         <div className="mx-auto w-fit">
+           <Image
+             src="/MALI Ed Logo (Black).svg"
+             alt="MALI Ed"
+             width={200}
+             height={60}
+             className="h-12 w-auto"
+           />
+         </div>
         <h2 className="mt-6 text-center text-2xl font-bold leading-9 tracking-tight text-gray-900">
             {isSignUp ? 'Create your account' : 'Sign in to your account'}
         </h2>
