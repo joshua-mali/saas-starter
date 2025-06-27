@@ -1,144 +1,133 @@
-import { db } from '@/lib/db/drizzle';
-import { createClient } from '@/lib/supabase/server';
-import { eq } from 'drizzle-orm';
-import { redirect } from 'next/navigation';
-import { TeamSettings } from './team-settings';
-// Import tables needed for creation + types
-import {
-  NewTeam,
-  NewTeamMember, // Use base TeamMember type
-  profiles, // Import profiles table
-  teamMembers,
-  teams,
-} from '@/lib/db/schema';
-// Import getMemberLimit helper
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { getMemberLimit } from '@/lib/plans';
-import { MessageSquare, Plus, StickyNote } from 'lucide-react';
-// Import logActivity types if needed
-// import { logActivity, ActivityType } from '@/app/(login)/actions';
+'use client'
 
-export default async function DashboardPage() {
-  const supabase = await createClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { createClient } from '@/lib/supabase/client'
+import { MessageSquare, Plus, Save, StickyNote, X } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { createGeneralNote } from './notes/actions'
 
-  if (authError || !user) {
-    redirect('/sign-in');
-  }
+interface QuickNoteFormData {
+  title: string
+  content: string
+}
 
-  let teamIdToLoad: number | null = null;
+export default function DashboardPage() {
+  const router = useRouter()
+  const [user, setUser] = useState<any>(null)
+  const [teamData, setTeamData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  
+  const [showQuickNoteForm, setShowQuickNoteForm] = useState(false)
+  const [quickNoteData, setQuickNoteData] = useState<QuickNoteFormData>({
+    title: '',
+    content: ''
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Try fetching existing membership
-  const [membership] = await db
-    .select({ teamId: teamMembers.teamId })
-    .from(teamMembers)
-    .where(eq(teamMembers.userId, user.id))
-    .limit(1);
-
-  // If no membership found, attempt to create default team and membership
-  if (!membership?.teamId) {
-    console.log(`No team membership found for user ${user.id}. Attempting to create default team...`);
-    try {
-       // IMPORTANT: Fetch user's profile needed for default team name
-      const [userProfile] = await db.select().from(profiles).where(eq(profiles.id, user.id)).limit(1);
-      if (!userProfile) {
-          // This case should ideally not happen if the trigger works, but handle defensively
-          console.warn(`Profile not found for user ${user.id} when creating default team. Using email for name.`);
-          // Optionally throw an error or proceed with a placeholder name
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const supabase = createClient()
+        const { data: { user: currentUser }, error } = await supabase.auth.getUser()
+        
+        if (error || !currentUser) {
+          router.push('/sign-in')
+          return
+        }
+        
+        setUser(currentUser)
+        // For now, we'll just set basic user data
+        // The team management functionality can be added later if needed
+        setTeamData({ name: `${currentUser.user_metadata?.full_name || currentUser.email}'s Team` })
+      } catch (error) {
+        console.error('Error fetching user data:', error)
+        toast.error('Error loading dashboard')
+      } finally {
+        setLoading(false)
       }
-
-      const newTeamData: NewTeam = {
-        name: `${userProfile?.full_name || user.email}'s Team`,
-        // --- Set Free Tier Defaults (camelCase) ---
-        planName: 'Free',
-        subscriptionStatus: 'free',
-        teacherLimit: 1, // Set free tier limit
-        stripeCustomerId: null,
-        stripeSubscriptionId: null,
-        stripeProductId: null,
-        // --- End Free Tier Defaults ---
-      };
-      const [createdTeam] = await db.insert(teams).values(newTeamData).returning({ id: teams.id });
-
-      if (!createdTeam?.id) {
-        throw new Error("Failed to create default team during insert.");
-      }
-
-      teamIdToLoad = createdTeam.id;
-
-      // No need to fetch profile again here
-
-      const newMemberData: NewTeamMember = {
-        userId: user.id,
-        teamId: teamIdToLoad,
-        role: 'owner',
-      };
-      await db.insert(teamMembers).values(newMemberData);
-
-      console.log(`Default team ${teamIdToLoad} (Free Plan) created for user ${user.id}.`);
-
-      // TODO: Log activity (Team Created - Free Plan)
-
-    } catch (creationError) {
-      console.error(`Failed to create default team/membership for user ${user.id}:`, creationError);
-      throw new Error('Failed to set up your team. Please contact support.');
     }
-  } else {
-    teamIdToLoad = membership.teamId;
+
+    fetchData()
+  }, [router])
+
+  const handleGoToNotes = () => {
+    router.push('/dashboard/notes')
   }
 
-  if (!teamIdToLoad) {
-     throw new Error('Could not determine team ID for user.');
+  const handleQuickNote = () => {
+    setShowQuickNoteForm(true)
   }
 
-  // Fetch ONLY team data and members
-  const [team, membersWithProfiles] = await Promise.all([
-    db.query.teams.findFirst({ where: eq(teams.id, teamIdToLoad) }),
-    db.select({
-        memberId: teamMembers.id,
-        userId: teamMembers.userId,
-        role: teamMembers.role,
-        joinedAt: teamMembers.joinedAt,
-        profileId: profiles.id,
-        fullName: profiles.full_name,
-        email: profiles.email
-    })
-    .from(teamMembers)
-    .leftJoin(profiles, eq(teamMembers.userId, profiles.id))
-    .where(eq(teamMembers.teamId, teamIdToLoad)),
-  ]);
-
-  if (!team) {
-    throw new Error(`Team not found for ID: ${teamIdToLoad}`);
+  const handleCancelQuickNote = () => {
+    setShowQuickNoteForm(false)
+    setQuickNoteData({ title: '', content: '' })
   }
 
-  // Calculate member limit
-  const memberLimit = getMemberLimit(team.planName);
+  const handleSubmitQuickNote = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setIsSubmitting(true)
 
-  // Adapt data structure
-  const adaptedTeamData = {
-    ...team, // Spread basic team info
-    memberLimit, // Add the calculated limit
-    teamMembers: membersWithProfiles.map((member) => ({
-      id: member.memberId,
-      userId: member.userId,
-      teamId: teamIdToLoad, // Already known
-      role: member.role,
-      joinedAt: member.joinedAt,
-      // Construct nested user object expected by Settings component
-      user: {
-        id: member.userId,
-        name: member.fullName ?? 'Unknown User',
-        email: member.email ?? 'No Email',
+    try {
+      const result = await createGeneralNote({
+        title: quickNoteData.title,
+        content: quickNoteData.content,
+        isPrivate: true
+      })
+
+      if (result.error) {
+        toast.error('Failed to create note', { description: result.error })
+      } else {
+        toast.success('Note created successfully!')
+        handleCancelQuickNote()
+        // Optionally redirect to notes page
+        router.push('/dashboard/notes')
       }
-    }))
-  };
+    } catch (error) {
+      toast.error('Error creating note')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
-  // Render the new layout
+  const handleGoToStudents = () => {
+    router.push('/dashboard/students')
+  }
+
+  if (loading) {
+    return (
+      <div className="p-4 lg:p-8">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/3 mb-6"></div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="space-y-6">
+              <div className="h-6 bg-gray-200 rounded w-1/4"></div>
+              <div className="h-32 bg-gray-200 rounded"></div>
+              <div className="h-32 bg-gray-200 rounded"></div>
+            </div>
+            <div className="space-y-6">
+              <div className="h-6 bg-gray-200 rounded w-1/4"></div>
+              <div className="h-48 bg-gray-200 rounded"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return null
+  }
+
   return (
     <div className="p-4 lg:p-8">
-      <h1 className="text-lg lg:text-2xl font-medium mb-6">Welcome back, {user.user_metadata.full_name}!</h1>
+      <h1 className="text-lg lg:text-2xl font-medium mb-6">
+        Welcome back, {user.user_metadata?.full_name || user.email}!
+      </h1>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Left Side - Quick Actions */}
@@ -157,15 +146,64 @@ export default async function DashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Create personal notes that only you can see. Perfect for lesson ideas, reminders, or general thoughts.
-                </p>
-                <Button className="w-full" variant="outline">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add General Note
-                </Button>
-              </div>
+              {showQuickNoteForm ? (
+                <form onSubmit={handleSubmitQuickNote} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="quickTitle">Title</Label>
+                    <Input
+                      id="quickTitle"
+                      value={quickNoteData.title}
+                      onChange={(e) => setQuickNoteData(prev => ({ ...prev, title: e.target.value }))}
+                      placeholder="Enter note title..."
+                      required
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="quickContent">Content</Label>
+                    <textarea
+                      id="quickContent"
+                      value={quickNoteData.content}
+                      onChange={(e) => setQuickNoteData(prev => ({ ...prev, content: e.target.value }))}
+                      placeholder="Enter your note content..."
+                      rows={4}
+                      required
+                      className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <Button type="submit" disabled={isSubmitting} className="flex-1">
+                      <Save className="h-4 w-4 mr-2" />
+                      {isSubmitting ? 'Saving...' : 'Save Note'}
+                    </Button>
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={handleCancelQuickNote}
+                      disabled={isSubmitting}
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Create personal notes that only you can see. Perfect for lesson ideas, reminders, or general thoughts.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button onClick={handleQuickNote} variant="outline" className="flex-1">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Quick Note
+                    </Button>
+                    <Button onClick={handleGoToNotes} variant="outline" className="flex-1">
+                      View All Notes
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -185,9 +223,9 @@ export default async function DashboardPage() {
                 <p className="text-sm text-muted-foreground">
                   Record behavioral observations, parent meeting notes, or general comments about students that are unrelated to their academic grades.
                 </p>
-                <Button className="w-full" variant="outline">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Student Comment
+                <Button onClick={handleGoToStudents} className="w-full" variant="outline">
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Go to Students
                 </Button>
               </div>
             </CardContent>
@@ -217,16 +255,33 @@ export default async function DashboardPage() {
           </Card>
         </div>
 
-        {/* Right Side - Team Settings */}
+        {/* Right Side - Team Info */}
         <div className="space-y-6">
           <h2 className="text-lg font-semibold text-gray-900">Team Management</h2>
-          <TeamSettings 
-            teamData={adaptedTeamData as any} 
-            currentMemberCount={adaptedTeamData.teamMembers.length}
-            memberLimit={adaptedTeamData.memberLimit}
-          />
+          <Card>
+            <CardHeader>
+              <CardTitle>Your Team</CardTitle>
+              <CardDescription>
+                Team settings and member management
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Team: {teamData?.name || 'Loading...'}
+                </p>
+                <Button 
+                  onClick={() => router.push('/dashboard/settings')} 
+                  className="w-full" 
+                  variant="outline"
+                >
+                  Manage Team Settings
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
-  );
+  )
 }
