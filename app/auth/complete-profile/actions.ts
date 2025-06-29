@@ -1,7 +1,7 @@
 'use server'
 
 import { db } from '@/lib/db/drizzle';
-import { invitations, teamMembers } from '@/lib/db/schema';
+import { invitations, teamMembers, teams } from '@/lib/db/schema';
 import { createClient } from '@/lib/supabase/server';
 import { eq } from 'drizzle-orm';
 import { cookies } from 'next/headers'; // Correct import
@@ -94,10 +94,36 @@ export async function completeUserProfile(data: { fullName: string }): Promise <
             return { error: `Profile updated, but failed to process team invitation. Please contact support. Details: ${inviteError instanceof Error ? inviteError.message : String(inviteError)}` };
         }
     } else {
-        // 4. Handle non-invite flow (create new team? - depends on requirements)
-        console.log(`No invite cookie found for user ${user.id}. Skipping team assignment.`);
-        // Add default team creation logic here if needed for non-invited users
-        // e.g., create a team named "${fullName}'s Team" and add user as owner
+        // 4. Handle non-invite flow - create a personal team for the user
+        console.log(`No invite cookie found for user ${user.id}. Creating personal team.`);
+        
+        try {
+            // Create a personal team for the user
+            const teamName = `${fullName}'s Team`;
+            const [newTeam] = await db.insert(teams).values({
+                name: teamName,
+                planName: 'free', // Default to free plan
+                // Other team fields will use defaults
+            }).returning({ id: teams.id });
+
+            if (!newTeam) {
+                throw new Error('Failed to create team');
+            }
+
+            console.log(`Created team ${newTeam.id} for user ${user.id}`);
+
+            // Add user as owner of their personal team
+            await db.insert(teamMembers).values({
+                userId: user.id,
+                teamId: newTeam.id,
+                role: 'owner',
+            });
+            console.log(`Added user ${user.id} as owner of team ${newTeam.id}`);
+
+        } catch (teamError) {
+            console.error(`Error creating personal team for user ${user.id}:`, teamError);
+            return { error: `Profile updated, but failed to set up your workspace. Please contact support. Details: ${teamError instanceof Error ? teamError.message : String(teamError)}` };
+        }
     }
 
     return { error: null } // Indicate overall success

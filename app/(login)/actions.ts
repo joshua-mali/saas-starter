@@ -1,19 +1,19 @@
 'use server';
 
 import {
-  validatedAction
+    validatedAction
 } from '@/lib/auth/middleware';
 import { db } from '@/lib/db/drizzle';
 import {
-  activityLogs,
-  ActivityType,
-  invitations,
-  profiles,
-  teamMembers,
-  teams,
-  type NewActivityLog,
-  type NewTeamMember,
-  type TeamMember
+    activityLogs,
+    ActivityType,
+    invitations,
+    profiles,
+    teamMembers,
+    teams,
+    type NewActivityLog,
+    type NewTeamMember,
+    type TeamMember
 } from '@/lib/db/schema';
 import { getMemberLimit } from '@/lib/plans';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -249,11 +249,41 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     redirect('/dashboard'); 
 
   } else {
-    // If NOT an invite flow, maybe redirect to profile completion or dashboard
-    // For now, just indicate success (no error returned implies success)
-    console.log('Sign up successful (no invite), redirecting...');
-    // Consider where non-invited new users should go. 
-    // Maybe redirect('/auth/complete-profile') or similar? Redirecting to dashboard for now.
+    // If NOT an invite flow, create a personal team for the user
+    console.log('Sign up successful (no invite), creating personal team...');
+    
+    try {
+      // Create a personal team for the user
+      const teamName = `${fullName}'s Team`;
+      const [newTeam] = await db.insert(teams).values({
+        name: teamName,
+        planName: 'free', // Default to free plan
+        // Other team fields will use defaults
+      }).returning({ id: teams.id });
+
+      if (!newTeam) {
+        throw new Error('Failed to create team');
+      }
+
+      console.log(`Created team ${newTeam.id} for user ${user.id}`);
+
+      // Add user as owner of their personal team
+      const newMemberData: NewTeamMember = {
+        userId: user.id,
+        teamId: newTeam.id,
+        role: 'owner',
+      };
+      await db.insert(teamMembers).values(newMemberData);
+      console.log(`Added user ${user.id} as owner of team ${newTeam.id}`);
+
+      // Log activity for team creation
+      await logActivity(newTeam.id, user.id, ActivityType.SIGN_UP);
+
+    } catch (teamError) {
+      console.error(`Error creating personal team for user ${user.id}:`, teamError);
+      return { error: 'Account created, but failed to set up your workspace. Please contact support.' };
+    }
+    
     redirect('/dashboard');
   }
   
