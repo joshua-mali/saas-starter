@@ -145,9 +145,11 @@ export function Login({ mode = 'signin', inviteToken, teamId, role }: LoginProps
             </p>
           )}
           {state?.message && (
-             <p className="text-sm text-green-600" aria-live="polite">
-               {state.message} {/* Assuming success is in `message` */}
-             </p>
+             <div className="p-3 bg-green-50 border border-green-200 rounded-md">
+               <p className="text-sm text-green-800" aria-live="polite">
+                 {state.message}
+               </p>
+             </div>
            )}
 
           {/* Submit Button */}

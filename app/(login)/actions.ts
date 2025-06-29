@@ -28,6 +28,7 @@ interface ActionResult {
   error?: string | null;
   fieldErrors?: Record<string, string[]> | null; // Keep fieldErrors if used elsewhere
   success?: boolean; // Add success flag
+  message?: string; // Add message field for success messages
 }
 
 async function logActivity(
@@ -166,13 +167,23 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
   }
 
   if (!user) {
-    // This case might indicate email confirmation is required, 
-    // or something else went wrong post-signup but pre-user-return.
-    // Consider if the message needs adjustment based on email confirmation settings.
-    return { error: 'Sign up process initiated. Please check your email to confirm your account.' }; 
+    // This case indicates email confirmation is required
+    return { 
+      success: true,
+      message: 'Account created successfully! Please check your email and click the confirmation link before signing in.' 
+    }; 
   }
 
   console.log('Sign up successful for:', user.email, 'User ID:', user.id);
+
+  // Check if email confirmation is required (user exists but email not confirmed)
+  if (user && !user.email_confirmed_at) {
+    console.log('User created but email confirmation required');
+    return { 
+      success: true,
+      message: 'Account created successfully! Please check your email and click the confirmation link before signing in.' 
+    };
+  }
 
   // --- Invite Processing Logic --- 
   if (inviteToken && teamId && role) {
