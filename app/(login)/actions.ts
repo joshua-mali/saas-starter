@@ -176,15 +176,6 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
 
   console.log('Sign up successful for:', user.email, 'User ID:', user.id);
 
-  // Check if email confirmation is required (user exists but email not confirmed)
-  if (user && !user.email_confirmed_at) {
-    console.log('User created but email confirmation required');
-    return { 
-      success: true,
-      message: 'Account created successfully! Please check your email and click the confirmation link before signing in.' 
-    };
-  }
-
   // --- Invite Processing Logic --- 
   if (inviteToken && teamId && role) {
     console.log(`Processing invite for user ${user.id} to team ${teamId} with role ${role}. Token: ${inviteToken}`);
@@ -293,6 +284,15 @@ export const signUp = validatedAction(signUpSchema, async (data, formData) => {
     } catch (teamError) {
       console.error(`Error creating personal team for user ${user.id}:`, teamError);
       return { error: 'Account created, but failed to set up your workspace. Please contact support.' };
+    }
+    
+    // Check if email confirmation is required after team creation
+    if (user && !user.email_confirmed_at) {
+      console.log('User and team created, but email confirmation required');
+      return { 
+        success: true,
+        message: 'Account created successfully! Please check your email and click the confirmation link before signing in.' 
+      };
     }
     
     redirect('/dashboard');
