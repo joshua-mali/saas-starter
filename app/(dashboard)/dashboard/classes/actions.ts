@@ -1,7 +1,7 @@
 'use server'
 
 import { db } from '@/lib/db/drizzle'
-import { classTeachers, classes, teamMembers } from '@/lib/db/schema'
+import { classTeachers, classes, gradeScales, teamMembers } from '@/lib/db/schema'
 import { createClient } from '@/lib/supabase/server'
 import { eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
@@ -21,6 +21,15 @@ interface ActionResult {
   error: string | null
   success?: boolean
 }
+
+// Default grade scales to create for each new class
+const DEFAULT_GRADE_SCALES = [
+  { name: 'Elementary', numericValue: 1, description: 'Student demonstrates elementary achievement of knowledge, understanding and skills' },
+  { name: 'Basic', numericValue: 2, description: 'Student demonstrates basic achievement of knowledge, understanding and skills' },
+  { name: 'Sound', numericValue: 3, description: 'Student demonstrates sound achievement of knowledge, understanding and skills' },
+  { name: 'Thorough', numericValue: 4, description: 'Student demonstrates thorough achievement of knowledge, understanding and skills' },
+  { name: 'Extensive', numericValue: 5, description: 'Student demonstrates extensive achievement of knowledge, understanding and skills' },
+]
 
 export async function createClass(
   prevState: ActionResult,
@@ -75,26 +84,42 @@ export async function createClass(
   const { className, calendarYear, stageId } = validatedFields.data
 
   try {
-    // Insert the new class using calendarYear and stageId
-    const [newClass] = await db
-      .insert(classes)
-      .values({
-        teamId: teamId,
-        calendarYear: calendarYear,
-        stageId: stageId,
-        name: className,
+    // Use a transaction to ensure both class and grade scales are created together
+    const result = await db.transaction(async (tx) => {
+      // Insert the new class using calendarYear and stageId
+      const [newClass] = await tx
+        .insert(classes)
+        .values({
+          teamId: teamId,
+          calendarYear: calendarYear,
+          stageId: stageId,
+          name: className,
+        })
+        .returning({ id: classes.id })
+
+      if (!newClass || !newClass.id) {
+        throw new Error('Failed to create class record.')
+      }
+
+      // Add the current user as a teacher for this class
+      await tx.insert(classTeachers).values({
+        classId: newClass.id,
+        teacherId: user.id,
+        isPrimary: true, // Make the creator the primary teacher by default
       })
-      .returning({ id: classes.id })
 
-    if (!newClass || !newClass.id) {
-      return { error: 'Failed to create class record.' }
-    }
+      // Create default grade scales for the new class
+      const gradeScalesToInsert = DEFAULT_GRADE_SCALES.map(scale => ({
+        classId: newClass.id,
+        name: scale.name,
+        numericValue: scale.numericValue,
+        description: scale.description,
+      }))
 
-    // 4. Add the current user as a teacher for this class
-    await db.insert(classTeachers).values({
-      classId: newClass.id,
-      teacherId: user.id,
-      isPrimary: true, // Make the creator the primary teacher by default
+      await tx.insert(gradeScales).values(gradeScalesToInsert)
+      console.log(`Created ${gradeScalesToInsert.length} grade scales for class ${newClass.id}`)
+
+      return newClass.id
     })
 
     revalidatePath('/dashboard/classes') // Revalidate the path to show the new class

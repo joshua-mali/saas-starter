@@ -115,7 +115,7 @@ export async function saveTermDates(prevState: ActionState, formData: FormData):
   }
 }
 
-// --- NEW: Update Grade Scales Action ---
+// --- UPDATED: Update Grade Scales Action (now class-specific) ---
 export async function updateGradeScales(prevState: ActionState, formData: FormData): Promise<ActionState> {
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -123,6 +123,12 @@ export async function updateGradeScales(prevState: ActionState, formData: FormDa
     // Basic auth check (consider role-based access if needed later)
     if (authError || !user) {
         return { error: 'User not authenticated', success: false };
+    }
+
+    // Get classId from form data
+    const classId = formData.get('classId') as string;
+    if (!classId) {
+        return { error: 'Class ID is required for updating grade scales', success: false };
     }
 
     const updates: { id: number; name: string; description: string | null }[] = [];
@@ -172,10 +178,20 @@ export async function updateGradeScales(prevState: ActionState, formData: FormDa
         return { error: 'No valid grade scale data submitted for update.', success: false };
     }
 
-    // 3. Database Operation
+    // 3. Database Operation - Verify grade scales belong to the class
     try {
         await db.transaction(async (tx) => {
             for (const update of updates) {
+                // Verify the grade scale belongs to the specified class
+                const [existingScale] = await tx.select({ classId: gradeScales.classId })
+                                                .from(gradeScales)
+                                                .where(eq(gradeScales.id, update.id))
+                                                .limit(1);
+
+                if (!existingScale || existingScale.classId !== classId) {
+                    throw new Error(`Grade scale ${update.id} does not belong to class ${classId}`);
+                }
+
                 await tx.update(gradeScales)
                         .set({
                             name: update.name,
@@ -187,7 +203,7 @@ export async function updateGradeScales(prevState: ActionState, formData: FormDa
         });
 
         revalidatePath('/dashboard/settings'); // Revalidate the settings page
-        // Potentially revalidate other paths where grade scale names might be displayed
+        revalidatePath('/dashboard/classes'); // Revalidate classes page where grade scales might be displayed
 
         return { success: true, error: null };
 

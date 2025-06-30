@@ -1,15 +1,15 @@
 import { relations } from 'drizzle-orm';
 import {
-    boolean,
-    date,
-    integer,
-    pgTable,
-    serial,
-    text,
-    timestamp,
-    uniqueIndex,
-    uuid,
-    varchar
+  boolean,
+  date,
+  integer,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+  varchar
 } from 'drizzle-orm/pg-core';
 
 const authSchema = 'auth';
@@ -99,11 +99,18 @@ export const subjects = pgTable('subjects', {
 
 export const gradeScales = pgTable('grade_scales', {
     id: serial('id').primaryKey(),
-    name: varchar('name', { length: 50 }).notNull().unique(),
-    numericValue: integer('numeric_value').notNull().unique(),
+    classId: uuid('class_id').notNull().references(() => classes.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 50 }).notNull(),
+    numericValue: integer('numeric_value').notNull(),
     description: text('description'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => {
+    return {
+        // Class-specific unique constraints
+        classNameUniqueIdx: uniqueIndex('grade_scales_class_name_unique').on(table.classId, table.name),
+        classValueUniqueIdx: uniqueIndex('grade_scales_class_value_unique').on(table.classId, table.numericValue),
+    };
 });
 
 export const outcomes = pgTable('outcomes', {
@@ -372,6 +379,7 @@ export const classesRelations = relations(classes, ({ one, many }) => ({
   studentEnrollments: many(studentEnrollments),
   classCurriculumPlanItems: many(classCurriculumPlan),
   teacherComments: many(teacherComments),
+  gradeScales: many(gradeScales),
 }));
 
 export const studentsRelations = relations(students, ({ one, many }) => ({
@@ -401,7 +409,8 @@ export const classCurriculumPlanRelations = relations(classCurriculumPlan, ({ on
   assessments: many(studentAssessments), // Add relation from plan item to assessments
 }))
 
-export const gradeScalesRelations = relations(gradeScales, ({ many }) => ({
+export const gradeScalesRelations = relations(gradeScales, ({ one, many }) => ({
+    class: one(classes, { fields: [gradeScales.classId], references: [classes.id] }),
     assessments: many(studentAssessments), // Add relation from grade scale to assessments
 }));
 

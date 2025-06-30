@@ -3,16 +3,16 @@ import csv from 'csv-parser';
 import { and, eq } from 'drizzle-orm';
 import fs from 'fs';
 import path from 'path';
-import { db } from '../lib/db/drizzle';
+import { db } from '../lib/db/drizzle.js';
 import {
-    contentGroups,
-    contentPoints,
-    focusAreas,
-    focusGroups,
-    outcomes,
-    stages,
-    subjects
-} from '../lib/db/schema';
+  contentGroups,
+  contentPoints,
+  focusAreas,
+  focusGroups,
+  outcomes,
+  stages,
+  subjects
+} from '../lib/db/schema.js';
 
 // --- Configuration ---
 // Files to process

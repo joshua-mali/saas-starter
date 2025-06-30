@@ -17,6 +17,7 @@ type SettingsProps = {
   initialTerms: Term[];
   calendarYear: number;
   gradeScales: GradeScale[];
+  classId?: string;
 };
 
 type ActionState = {
@@ -49,7 +50,7 @@ function GradeScaleSubmitButton() {
   );
 }
 
-export function Settings({ initialTerms, calendarYear, gradeScales }: SettingsProps) {
+export function Settings({ initialTerms, calendarYear, gradeScales, classId }: SettingsProps) {
   const [termState, termAction] = useActionState(saveTermDates, { error: null, success: false });
   const termFormRef = useRef<HTMLFormElement>(null);
   const initialTermMap = new Map(initialTerms.map(t => [t.termNumber, t]));
@@ -276,44 +277,69 @@ export function Settings({ initialTerms, calendarYear, gradeScales }: SettingsPr
           <CardHeader>
             <CardTitle>Grading Scale Names</CardTitle>
             <CardDescription>
-              Define the names and descriptions for each grading level. Numeric values are fixed.
+              {classId 
+                ? "Define the names and descriptions for each grading level. Numeric values are fixed."
+                : "Select a specific class to manage its grading scale."
+              }
             </CardDescription>
           </CardHeader>
-          <form ref={scaleFormRef} action={scaleAction}>
-            <CardContent className="space-y-4">
-              {gradeScales.map((scale) => (
-                <div key={scale.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center border-b pb-4 last:border-b-0 last:pb-0">
-                  <div className="space-y-1 md:col-span-1">
-                    <Label>Numeric Value</Label>
-                    <p className="font-mono text-lg px-3 py-2">{scale.numericValue}</p>
-                    <input type="hidden" name={`id_${scale.id}`} value={scale.id} />
+          {classId && gradeScales.length > 0 ? (
+            <form ref={scaleFormRef} action={scaleAction}>
+              <input type="hidden" name="classId" value={classId} />
+              <CardContent className="space-y-4">
+                {gradeScales.map((scale) => (
+                  <div key={scale.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center border-b pb-4 last:border-b-0 last:pb-0">
+                    <div className="space-y-1 md:col-span-1">
+                      <Label>Numeric Value</Label>
+                      <p className="font-mono text-lg px-3 py-2">{scale.numericValue}</p>
+                      <input type="hidden" name={`id_${scale.id}`} value={scale.id} />
+                    </div>
+                    <div className="space-y-1 md:col-span-1">
+                      <Label htmlFor={`name_${scale.id}`}>Display Name</Label>
+                      <Input
+                        id={`name_${scale.id}`}
+                        name={`name_${scale.id}`}
+                        defaultValue={scale.name ?? ''}
+                        required
+                        maxLength={50}
+                      />
+                    </div>
+                    <div className="space-y-1 md:col-span-1">
+                      <Label htmlFor={`description_${scale.id}`}>Description (Optional)</Label>
+                      <Input
+                        id={`description_${scale.id}`}
+                        name={`description_${scale.id}`}
+                        defaultValue={scale.description ?? ''}
+                        maxLength={200}
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1 md:col-span-1">
-                    <Label htmlFor={`name_${scale.id}`}>Display Name</Label>
-                    <Input
-                      id={`name_${scale.id}`}
-                      name={`name_${scale.id}`}
-                      defaultValue={scale.name ?? ''}
-                      required
-                      maxLength={50}
-                    />
-                  </div>
-                  <div className="space-y-1 md:col-span-1">
-                    <Label htmlFor={`description_${scale.id}`}>Description (Optional)</Label>
-                    <Input
-                      id={`description_${scale.id}`}
-                      name={`description_${scale.id}`}
-                      defaultValue={scale.description ?? ''}
-                      maxLength={200}
-                    />
-                  </div>
-                </div>
-              ))}
+                ))}
+              </CardContent>
+              <CardFooter>
+                <GradeScaleSubmitButton />
+              </CardFooter>
+            </form>
+          ) : (
+            <CardContent>
+              <div className="text-center py-8">
+                <p className="text-muted-foreground mb-4">
+                  {!classId 
+                    ? "To manage grading scales, please access settings from a specific class page."
+                    : "No grading scales found for this class."
+                  }
+                </p>
+                {!classId && (
+                  <Button 
+                    onClick={() => window.location.href = '/dashboard/classes'}
+                    variant="outline"
+                  >
+                    Go to Classes
+                  </Button>
+                )}
+              </div>
             </CardContent>
-            <CardFooter>
-              <GradeScaleSubmitButton />
-            </CardFooter>
-          </form>
+          )}
         </Card>
       </TabsContent>
 

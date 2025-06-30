@@ -17,20 +17,29 @@ async function getTermDatesForYear(teamId: number, calendarYear: number): Promis
   return termData;
 }
 
-// --- NEW: Function to fetch grade scales ---
-async function getGradeScales(): Promise<GradeScale[]> {
-    // Assuming grade scales are global for now
-    // Add teamId filtering if schema changes later
-    return db.select().from(gradeScales).orderBy(asc(gradeScales.numericValue));
+// --- UPDATED: Function to fetch grade scales for a specific class ---
+async function getGradeScalesForClass(classId: string): Promise<GradeScale[]> {
+    return db.select()
+             .from(gradeScales)
+             .where(eq(gradeScales.classId, classId))
+             .orderBy(asc(gradeScales.numericValue));
 }
 
-export default async function SettingsPage() { 
+type SettingsPageProps = {
+  searchParams: Promise<{ classId?: string }>
+}
+
+export default async function SettingsPage({ searchParams }: SettingsPageProps) { 
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
 
   if (authError || !user) {
     redirect('/sign-in');
   }
+
+  // Get classId if provided (optional for general settings)
+  const resolvedSearchParams = await searchParams;
+  const classId = resolvedSearchParams.classId;
 
   // Get user's team ID (same logic as before)
   const [userTeam] = await db.select({ teamId: teamMembers.teamId })
@@ -45,19 +54,24 @@ export default async function SettingsPage() {
 
   // Determine current year and fetch terms
   const currentYear = new Date().getFullYear();
-  const [existingTerms, allGradeScales] = await Promise.all([
+  
+  // Fetch grade scales only if classId is provided
+  const [existingTerms, classGradeScales] = await Promise.all([
       getTermDatesForYear(teamId, currentYear),
-      getGradeScales()
+      classId ? getGradeScalesForClass(classId) : Promise.resolve([])
   ]);
 
   // Render the Settings UI component, passing all data
   return (
     <div className="p-4 lg:p-8">
-      <h1 className="text-lg lg:text-2xl font-medium mb-6">Settings</h1>
+      <h1 className="text-lg lg:text-2xl font-medium mb-6">
+        {classId ? 'Class Settings' : 'Team Settings'}
+      </h1>
       <Settings 
         initialTerms={existingTerms} 
         calendarYear={currentYear} 
-        gradeScales={allGradeScales}
+        gradeScales={classGradeScales}
+        classId={classId}
       />
     </div>
   );

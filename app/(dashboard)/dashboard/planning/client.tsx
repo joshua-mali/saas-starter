@@ -2,17 +2,17 @@
 
 import { Input } from '@/components/ui/input'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
 } from '@/components/ui/select'
 import {
-  type Class,
-  type ClassCurriculumPlanItem,
-  type Stage,
-  type Term
+    type Class,
+    type ClassCurriculumPlanItem,
+    type Stage,
+    type Term
 } from '@/lib/db/schema'
 import { useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
@@ -21,16 +21,16 @@ import { toast } from 'sonner'
 // DND Imports
 import { cn } from '@/lib/utils'
 import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  useDraggable,
-  useDroppable,
-  useSensor,
-  useSensors,
-  type Active,
-  type DragEndEvent,
-  type DragStartEvent,
+    DndContext,
+    DragOverlay,
+    PointerSensor,
+    useDraggable,
+    useDroppable,
+    useSensor,
+    useSensors,
+    type Active,
+    type DragEndEvent,
+    type DragStartEvent,
 } from '@dnd-kit/core'
 
 // Import server actions
@@ -367,6 +367,32 @@ export default function PlanningBoardClient({
       );
   }
 
+  // Check if terms are available
+  if (!terms || terms.length === 0) {
+      return (
+          <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+              <div className="max-w-md space-y-4">
+                  <h2 className="text-xl font-semibold text-gray-900">No Term Dates Set</h2>
+                  <p className="text-muted-foreground">
+                      You need to set up term dates before you can start planning curriculum content. 
+                      Term dates define the weeks available for planning.
+                  </p>
+                  <div className="pt-4">
+                      <button
+                          onClick={() => window.location.href = '/dashboard/settings'}
+                          className="inline-flex items-center px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-md font-medium transition-colors"
+                      >
+                          Go to Settings to Set Term Dates
+                      </button>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                      Once term dates are configured, you'll be able to drag and drop curriculum content onto specific weeks.
+                  </p>
+              </div>
+          </div>
+      );
+  }
+
   return (
     <DndContext
         sensors={sensors}
@@ -425,24 +451,48 @@ export default function PlanningBoardClient({
 
           {/* Main content area - Week columns */}
           <div className="flex-1 overflow-hidden flex flex-col">
-            {/* Make this scrollable horizontally */}
-            <div className="flex-1 overflow-x-auto">
-              <div className="flex flex-nowrap space-x-2 p-2 h-full min-h-full">
-                {weeksInSelectedTerm.map(week => (
-                  <DroppableWeekColumn key={week.toISOString()} weekStartDate={week}>
-                    {planItems
-                      .filter(item => formatDate(item.weekStartDate) === formatDate(week))
-                      .map(item => (
-                        <DraggablePlanItem 
-                          key={item.id} 
-                          item={item} 
-                          contentGroupName={contentGroupMap.get(item.contentGroupId)} 
-                        />
-                      ))}
-                  </DroppableWeekColumn>
-                ))}
+            {weeksInSelectedTerm.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center p-8">
+                <div className="text-center max-w-md space-y-4">
+                  <h3 className="text-lg font-medium text-gray-900">No Weeks Available</h3>
+                  <p className="text-muted-foreground">
+                    {selectedTerm 
+                      ? `Term ${selectedTerm.termNumber} has no valid weeks. Please check that the term dates are set correctly in settings.`
+                      : "Please select a term to view the planning weeks."
+                    }
+                  </p>
+                  {selectedTerm && (
+                    <div className="pt-2">
+                      <button
+                        onClick={() => window.location.href = '/dashboard/settings'}
+                        className="inline-flex items-center px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-md text-sm font-medium transition-colors"
+                      >
+                        Check Settings
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            ) : (
+              /* Make this scrollable horizontally */
+              <div className="flex-1 overflow-x-auto">
+                <div className="flex flex-nowrap space-x-2 p-2 h-full min-h-full">
+                  {weeksInSelectedTerm.map(week => (
+                    <DroppableWeekColumn key={week.toISOString()} weekStartDate={week}>
+                      {planItems
+                        .filter(item => formatDate(item.weekStartDate) === formatDate(week))
+                        .map(item => (
+                          <DraggablePlanItem 
+                            key={item.id} 
+                            item={item} 
+                            contentGroupName={contentGroupMap.get(item.contentGroupId)} 
+                          />
+                        ))}
+                    </DroppableWeekColumn>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
