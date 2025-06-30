@@ -149,7 +149,7 @@ export default async function PlanningPage({ searchParams: searchParamsPromise }
   }
 
   const [termsData, contentGroupsData, existingPlanData] = await Promise.all([
-    getTermsForYear(classData.teamId, classData.calendarYear),
+    getTermsForYear(userTeamId, new Date().getFullYear()),
     getContentGroupsForStage(classData.stageId),
     getExistingPlan(classId),
   ]);
