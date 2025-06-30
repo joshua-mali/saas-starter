@@ -12,6 +12,21 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { createGeneralNote, createStudentComment } from './notes/actions'
 
+// --- Helper: Generate default title ---
+function generateDefaultTitle(): string {
+  const now = new Date()
+  const options: Intl.DateTimeFormatOptions = {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Australia/Sydney'
+  }
+  return now.toLocaleDateString('en-AU', options).replace(' at ', ' - ')
+}
+
 interface QuickNoteFormData {
   title: string
   content: string
@@ -45,6 +60,15 @@ export default function DashboardPage() {
     content: ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Helper function to get first name from full name
+  const getFirstName = (fullName: string | null | undefined, email: string | null | undefined): string => {
+    if (fullName) {
+      const firstName = fullName.split(' ')[0]
+      return firstName
+    }
+    return email || 'there'
+  }
 
   const [showQuickCommentForm, setShowQuickCommentForm] = useState(false)
   const [quickCommentData, setQuickCommentData] = useState<QuickCommentFormData>({
@@ -113,7 +137,7 @@ export default function DashboardPage() {
 
     try {
       const result = await createGeneralNote({
-        title: quickNoteData.title,
+        title: quickNoteData.title.trim() || undefined,
         content: quickNoteData.content,
         isPrivate: true
       })
@@ -123,7 +147,6 @@ export default function DashboardPage() {
       } else {
         toast.success('Note created successfully!')
         handleCancelQuickNote()
-        router.push('/dashboard/notes')
       }
     } catch (error) {
       toast.error('Error creating note')
@@ -165,7 +188,7 @@ export default function DashboardPage() {
       const result = await createStudentComment({
         studentId: quickCommentData.studentId,
         classId: quickCommentData.classId,
-        title: quickCommentData.title,
+        title: quickCommentData.title.trim() || undefined,
         content: quickCommentData.content
       })
 
@@ -214,7 +237,7 @@ export default function DashboardPage() {
   return (
     <div className="p-4 lg:p-8">
       <h1 className="text-lg lg:text-2xl font-medium mb-6">
-        Welcome back, {user.user_metadata?.full_name || user.email}!
+        Welcome back, {getFirstName(user.user_metadata?.full_name, user.email)}!
       </h1>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -237,13 +260,12 @@ export default function DashboardPage() {
               {showQuickNoteForm ? (
                 <form onSubmit={handleSubmitQuickNote} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="quickTitle">Title</Label>
+                    <Label htmlFor="quickTitle">Title <span className="text-xs text-muted-foreground">(optional - defaults to current date/time)</span></Label>
                     <Input
                       id="quickTitle"
                       value={quickNoteData.title}
                       onChange={(e) => setQuickNoteData(prev => ({ ...prev, title: e.target.value }))}
-                      placeholder="Enter note title..."
-                      required
+                      placeholder="Enter note title or leave blank for auto-generated title..."
                     />
                   </div>
                   
@@ -326,13 +348,12 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="commentTitle">Title</Label>
+                    <Label htmlFor="commentTitle">Title <span className="text-xs text-muted-foreground">(optional - defaults to current date/time)</span></Label>
                     <Input
                       id="commentTitle"
                       value={quickCommentData.title}
                       onChange={(e) => setQuickCommentData(prev => ({ ...prev, title: e.target.value }))}
-                      placeholder="Comment title..."
-                      required
+                      placeholder="Comment title or leave blank for auto-generated title..."
                     />
                   </div>
                   

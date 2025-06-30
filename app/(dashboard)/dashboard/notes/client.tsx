@@ -181,13 +181,12 @@ export default function NotesClient({ initialNotes }: NotesClientProps) {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="title">Title</Label>
+                <Label htmlFor="title">Title <span className="text-xs text-muted-foreground">(optional - defaults to current date/time)</span></Label>
                 <Input
                   id="title"
                   value={formData.title}
                   onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder="Enter note title..."
-                  required
+                  placeholder="Enter note title or leave blank for auto-generated title..."
                 />
               </div>
               

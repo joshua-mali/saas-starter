@@ -130,7 +130,7 @@ Enter the details for your new class.
                     </span>
                     {cls.stage && (
                       <span className="ml-2 text-sm text-muted-foreground">
-                        {cls.stage.name}
+                        Stage {cls.stage.name}
                       </span>
                     )}
                   </div>

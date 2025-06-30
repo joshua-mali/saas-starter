@@ -12,7 +12,7 @@ const createClassSchema = z.object({
   calendarYear: z.coerce
     .number()
     .int()
-    .min(2000, 'Please enter a valid year (e.g., 2024)')
+    .min(2000, 'Please enter a valid year (e.g., 2025)')
     .max(2100, 'Please enter a valid year'),
   stageId: z.coerce.number().int().positive('Stage selection is required'),
 })

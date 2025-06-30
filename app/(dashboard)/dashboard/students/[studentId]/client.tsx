@@ -183,7 +183,7 @@ export default function StudentOverviewClient({
                 const result = await createStudentComment({
                     studentId: student.id,
                     classId: classData.id,
-                    title: commentForm.title,
+                    title: commentForm.title.trim() || undefined,
                     content: commentForm.content
                 });
 
@@ -333,13 +333,14 @@ export default function StudentOverviewClient({
                             <div className="mb-4 p-3 border rounded-md bg-gray-50">
                                 <form onSubmit={handleSubmitComment} className="space-y-3">
                                     <div className="space-y-1">
-                                        <Label htmlFor="commentTitle" className="text-xs">Title</Label>
+                                        <Label htmlFor="commentTitle" className="text-xs">
+                                            Title <span className="text-muted-foreground">(optional - defaults to current date/time)</span>
+                                        </Label>
                                         <Input
                                             id="commentTitle"
                                             value={commentForm.title}
                                             onChange={(e) => setCommentForm(prev => ({ ...prev, title: e.target.value }))}
-                                            placeholder="Comment title..."
-                                            required
+                                            placeholder="Comment title or leave blank for auto-generated title..."
                                             className="text-sm"
                                         />
                                     </div>

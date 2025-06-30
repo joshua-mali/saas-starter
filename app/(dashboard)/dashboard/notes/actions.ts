@@ -8,19 +8,40 @@ import { and, desc, eq } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
+// --- Helper: Generate default title ---
+function generateDefaultTitle(): string {
+  const now = new Date()
+  const options: Intl.DateTimeFormatOptions = {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Australia/Sydney'
+  }
+  return now.toLocaleDateString('en-AU', options).replace(' at ', ' - ')
+}
+
 // --- Schemas ---
 const createNoteSchema = z.object({
-  title: z.string().min(1, "Title is required").max(255, "Title must be 255 characters or less"),
+  title: z.string().max(255, "Title must be 255 characters or less").optional(),
   content: z.string().min(1, "Content is required"),
   isPrivate: z.boolean().default(true),
-})
+}).transform((data) => ({
+  ...data,
+  title: data.title && data.title.trim() ? data.title.trim() : generateDefaultTitle()
+}))
 
 const updateNoteSchema = z.object({
   id: z.string().uuid(),
-  title: z.string().min(1, "Title is required").max(255, "Title must be 255 characters or less"),
+  title: z.string().max(255, "Title must be 255 characters or less").optional(),
   content: z.string().min(1, "Content is required"),
   isPrivate: z.boolean().default(true),
-})
+}).transform((data) => ({
+  ...data,
+  title: data.title && data.title.trim() ? data.title.trim() : generateDefaultTitle()
+}))
 
 const deleteNoteSchema = z.object({
   id: z.string().uuid(),
@@ -277,7 +298,7 @@ export async function getStudentComments(studentId: string, classId: string) {
 export async function createStudentComment(rawData: { 
   studentId: string, 
   classId: string, 
-  title: string, 
+  title?: string, 
   content: string 
 }): Promise<ActionResult> {
   const authResult = await getCurrentUserAndTeam()
@@ -289,9 +310,12 @@ export async function createStudentComment(rawData: {
 
   const { studentId, classId, title, content } = rawData
 
-  if (!studentId || !classId || !title || !content) {
+  if (!studentId || !classId || !content) {
     return { error: 'Missing required fields for student comment.' }
   }
+
+  // Generate default title if not provided
+  const finalTitle = title && title.trim() ? title.trim() : generateDefaultTitle()
 
   try {
     await db.insert(teacherComments).values({
@@ -300,7 +324,7 @@ export async function createStudentComment(rawData: {
       commentType: 'student',
       studentId,
       classId,
-      title,
+      title: finalTitle,
       content,
       isPrivate: true, // Student comments are always private to the teacher
     })
