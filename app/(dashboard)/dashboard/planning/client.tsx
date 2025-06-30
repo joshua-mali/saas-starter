@@ -248,6 +248,21 @@ export default function PlanningBoardClient({
     );
   }, [searchTerm, availableContentGroups]);
 
+  // Separate content groups into planned and unplanned
+  const { unplannedContentGroups, plannedContentGroups } = useMemo(() => {
+    const plannedContentGroupIds = new Set(planItems.map(item => item.contentGroupId));
+    
+    const unplanned = filteredContentGroups.filter(cg => 
+      !plannedContentGroupIds.has(cg.contentGroupId)
+    );
+    
+    const planned = filteredContentGroups.filter(cg => 
+      plannedContentGroupIds.has(cg.contentGroupId)
+    );
+    
+    return { unplannedContentGroups: unplanned, plannedContentGroups: planned };
+  }, [filteredContentGroups, planItems]);
+
   const handleTermChange = (value: string) => {
     setSelectedTermNumber(parseInt(value, 10) || null);
   };
@@ -433,6 +448,9 @@ export default function PlanningBoardClient({
           <aside className="w-64 border-r p-2 flex flex-col h-full flex-shrink-0">
             <div className="p-2 space-y-2 flex-shrink-0">
               <h2 className="text-lg font-medium">Available Content</h2>
+              <div className="text-xs text-muted-foreground">
+                {unplannedContentGroups.length} unplanned • {plannedContentGroups.length} allocated
+              </div>
               <Input
                 placeholder="Search content..."
                 value={searchTerm}
@@ -443,9 +461,39 @@ export default function PlanningBoardClient({
             
             {/* Content groups area - Make this scrollable */}
             <div className="flex-grow overflow-y-auto mt-2 pr-2">
-              {filteredContentGroups.map(cg => (
+              {/* Unplanned Content Groups */}
+              {unplannedContentGroups.map(cg => (
                 <DraggableContentGroup key={cg.contentGroupId} cg={cg} />
               ))}
+              
+              {/* Divider and Planned Content Groups */}
+              {plannedContentGroups.length > 0 && (
+                <>
+                  <div className="my-4 border-t border-gray-200">
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <div className="w-full border-t border-gray-300" />
+                      </div>
+                      <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-white px-2 text-gray-500">Already Allocated</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {plannedContentGroups.map(cg => (
+                    <div key={`planned-${cg.contentGroupId}`} className="opacity-60">
+                      <DraggableContentGroup cg={cg} />
+                    </div>
+                  ))}
+                </>
+              )}
+              
+              {/* Empty state when no content groups match search */}
+              {unplannedContentGroups.length === 0 && plannedContentGroups.length === 0 && searchTerm && (
+                <div className="text-center py-8">
+                  <p className="text-sm text-muted-foreground">No content groups match your search.</p>
+                </div>
+              )}
             </div>
           </aside>
 
