@@ -19,13 +19,13 @@ import {
     TableHeader,
     TableRow
 } from "@/components/ui/table"
-import { UserCog } from 'lucide-react'; // For loading indicators and icons
+import { Upload, UserCog, X } from 'lucide-react'; // For loading indicators and icons
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useActionState, useEffect, useRef, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { toast } from 'sonner'
-import { addStudentToClass } from './actions'; // Corrected action name
+import { addStudentToClass, addStudentsBatch } from './actions'; // Import batch action
 
 // Type for student data received from server
 // (Ideally, move this type definition to a shared file)
@@ -60,6 +60,13 @@ export default function StudentsPageClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
+
+  // CSV Upload states
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvData, setCsvData] = useState<{ firstName: string; lastName: string }[]>([]);
+  const [showCsvPreview, setShowCsvPreview] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Derive classId primarily from URL, fall back to initial prop if needed
   const classIdFromUrl = searchParams.get('classId');
@@ -100,48 +107,248 @@ export default function StudentsPageClient({
     `${student.firstName} ${student.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // CSV Upload Functions
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
+      toast.error('Please select a CSV file');
+      return;
+    }
+
+    setCsvFile(file);
+    parseCSV(file);
+  };
+
+  const parseCSV = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      if (lines.length === 0) {
+        toast.error('CSV file is empty');
+        return;
+      }
+
+      // Skip header row if it exists (check if first row contains "first" or "last")
+      const startIndex = lines[0].toLowerCase().includes('first') || lines[0].toLowerCase().includes('last') ? 1 : 0;
+      
+      const parsedData: { firstName: string; lastName: string }[] = [];
+      
+      for (let i = startIndex; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        const columns = line.split(',').map(col => col.trim().replace(/"/g, ''));
+        
+        if (columns.length >= 2) {
+          const firstName = columns[0];
+          const lastName = columns[1];
+          
+          if (firstName && lastName) {
+            parsedData.push({ firstName, lastName });
+          }
+        }
+      }
+
+      if (parsedData.length === 0) {
+        toast.error('No valid student data found in CSV. Expected format: FirstName, LastName');
+        return;
+      }
+
+      setCsvData(parsedData);
+      setShowCsvPreview(true);
+    };
+
+    reader.onerror = () => {
+      toast.error('Error reading CSV file');
+    };
+
+    reader.readAsText(file);
+  };
+
+  const handleCsvUpload = async () => {
+    if (!currentClassId) {
+      toast.error('Please select a class before uploading students');
+      return;
+    }
+
+    if (csvData.length === 0) {
+      toast.error('No student data to upload');
+      return;
+    }
+
+    setIsUploading(true);
+    
+    try {
+      // Call the server action properly
+      const result = await addStudentsBatch(csvData, currentClassId);
+      
+      if (result.error) {
+        toast.error('Upload failed', { description: result.error });
+      } else if (result.success) {
+        toast.success('Students uploaded successfully!', { 
+          description: `Added ${result.addedCount} students to the class` 
+        });
+        handleCancelCsvUpload();
+        // Refresh the page to show new students
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error('CSV upload error:', error);
+      toast.error('Error uploading students');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleCancelCsvUpload = () => {
+    setCsvFile(null);
+    setCsvData([]);
+    setShowCsvPreview(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* --- Add Student Card --- */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Add New Student</CardTitle>
-          <CardDescription>
-            Enter the details for the new student. They will be added to the currently selected class: {currentClassId ? `(Class ID: ${currentClassId})` : '(No class selected)'}
-          </CardDescription>
-        </CardHeader>
-        {/* Pass currentClassId derived from URL to the form action */}
-        <form ref={formRef} action={(formData) => {
-            if (!currentClassId) {
-                toast.error("Please select a class before adding a student.");
-                return;
-            }
-            formData.append('classId', currentClassId); // Add classId derived from URL
-            formAction(formData); // Call the action with formData
-        }}>
-          <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-2">
-              <Label htmlFor="firstName">First Name</Label>
-              <Input id="firstName" name="firstName" placeholder="e.g., John" required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="lastName">Last Name</Label>
-              <Input id="lastName" name="lastName" placeholder="e.g., Doe" required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="dateOfBirth">Date of Birth</Label>
-              <Input id="dateOfBirth" name="dateOfBirth" type="date" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="externalId">External ID (Optional)</Label>
-              <Input id="externalId" name="externalId" placeholder="School ID" />
-            </div>
+      {/* Top Row - Add Student and Bulk Import side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* --- Add Student Card --- */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Add New Student</CardTitle>
+            <CardDescription>
+              Enter the details for the new student. They will be added to the currently selected class: {currentClassId ? `(Class ID: ${currentClassId})` : '(No class selected)'}
+            </CardDescription>
+          </CardHeader>
+          {/* Pass currentClassId derived from URL to the form action */}
+          <form ref={formRef} action={(formData) => {
+              if (!currentClassId) {
+                  toast.error("Please select a class before adding a student.");
+                  return;
+              }
+              formData.append('classId', currentClassId); // Add classId derived from URL
+              formAction(formData); // Call the action with formData
+          }}>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="firstName">First Name</Label>
+                  <Input id="firstName" name="firstName" placeholder="e.g., John" required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lastName">Last Name</Label>
+                  <Input id="lastName" name="lastName" placeholder="e.g., Doe" required />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                  <Input id="dateOfBirth" name="dateOfBirth" type="date" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="externalId">External ID (Optional)</Label>
+                  <Input id="externalId" name="externalId" placeholder="School ID" />
+                </div>
+              </div>
+            </CardContent>
+            <CardFooter>
+              <SubmitButton />
+            </CardFooter>
+          </form>
+        </Card>
+
+        {/* --- CSV Upload Card --- */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Bulk Import Students</CardTitle>
+            <CardDescription>
+              Upload a CSV file to add multiple students at once. Expected format: FirstName, LastName (with optional header row).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {!showCsvPreview ? (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="csvFile">Select CSV File</Label>
+                  <Input
+                    id="csvFile"
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileSelect}
+                    disabled={!currentClassId}
+                  />
+                  {!currentClassId && (
+                    <p className="text-sm text-muted-foreground">Please select a class first</p>
+                  )}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  <p className="font-medium mb-2">CSV Format Requirements:</p>
+                  <ul className="list-disc list-inside space-y-1 text-xs">
+                    <li>First column: First Name</li>
+                    <li>Second column: Last Name</li>
+                    <li>Optional header row (auto-detected)</li>
+                    <li>Example: John,Smith</li>
+                  </ul>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium">Preview ({csvData.length} students)</h4>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleCancelCsvUpload}
+                    disabled={isUploading}
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Cancel
+                  </Button>
+                </div>
+                
+                <div className="max-h-48 overflow-y-auto border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-xs">First Name</TableHead>
+                        <TableHead className="text-xs">Last Name</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {csvData.slice(0, 8).map((student, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="text-sm">{student.firstName}</TableCell>
+                          <TableCell className="text-sm">{student.lastName}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {csvData.length > 8 && (
+                    <p className="text-xs text-muted-foreground p-2 text-center">
+                      ... and {csvData.length - 8} more students
+                    </p>
+                  )}
+                </div>
+                
+                <Button 
+                  onClick={handleCsvUpload}
+                  disabled={isUploading || !currentClassId}
+                  className="w-full"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  {isUploading ? 'Uploading...' : `Upload ${csvData.length} Students`}
+                </Button>
+              </div>
+            )}
           </CardContent>
-          <CardFooter>
-            <SubmitButton />
-          </CardFooter>
-        </form>
-      </Card>
+        </Card>
+      </div>
 
       {/* --- Student List Card --- */}
       <Card>
