@@ -2,17 +2,17 @@
 
 import { Input } from '@/components/ui/input'
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select'
 import {
-    type Class,
-    type ClassCurriculumPlanItem,
-    type Stage,
-    type Term
+  type Class,
+  type ClassCurriculumPlanItem,
+  type Stage,
+  type Term
 } from '@/lib/db/schema'
 import { useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -21,16 +21,16 @@ import { toast } from 'sonner'
 // DND Imports
 import { cn } from '@/lib/utils'
 import {
-    DndContext,
-    DragOverlay,
-    PointerSensor,
-    useDraggable,
-    useDroppable,
-    useSensor,
-    useSensors,
-    type Active,
-    type DragEndEvent,
-    type DragStartEvent,
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type Active,
+  type DragEndEvent,
+  type DragStartEvent,
 } from '@dnd-kit/core'
 
 // Import server actions
@@ -121,9 +121,10 @@ function DraggableContentGroup({ cg, isOverlay }: DraggableContentGroupProps) {
 interface DraggablePlanItemProps {
   item: ClassCurriculumPlanItem;
   contentGroupName?: string;
+  contentGroupData?: ContentGroupWithContext;
   isOverlay?: boolean; // Flag for overlay rendering
 }
-function DraggablePlanItem({ item, contentGroupName, isOverlay }: DraggablePlanItemProps) {
+function DraggablePlanItem({ item, contentGroupName, contentGroupData, isOverlay }: DraggablePlanItemProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `planitem-${item.id}`,
     data: {
@@ -141,7 +142,7 @@ function DraggablePlanItem({ item, contentGroupName, isOverlay }: DraggablePlanI
 
   // Hide original element when dragging if not rendering in overlay
   if (isDragging && !isOverlay) {
-       return <div ref={setNodeRef} className="opacity-30 h-10"></div>; // Placeholder
+       return <div ref={setNodeRef} className="opacity-30 h-16"></div>; // Placeholder
   }
 
   return (
@@ -152,7 +153,12 @@ function DraggablePlanItem({ item, contentGroupName, isOverlay }: DraggablePlanI
       {...attributes}
       className={cn("cursor-grab rounded border bg-card p-2 text-sm shadow mb-2", isOverlay && "shadow-lg")}
     >
-      <p>{contentGroupName || `Content Group ${item.contentGroupId}`}</p>
+      <p className="font-semibold">{contentGroupData?.contentGroupName || contentGroupName || `Content Group ${item.contentGroupId}`}</p>
+      {contentGroupData && (
+        <p className="text-xs text-muted-foreground">
+          {contentGroupData.subjectName} &gt; {contentGroupData.outcomeName} &gt; {contentGroupData.focusAreaName} &gt; {contentGroupData.focusGroupName}
+        </p>
+      )}
     </div>
   );
 }
@@ -561,6 +567,7 @@ export default function PlanningBoardClient({
                             key={item.id} 
                             item={item} 
                             contentGroupName={contentGroupMap.get(item.contentGroupId)} 
+                            contentGroupData={item.contentGroupId ? availableContentGroups.find(cg => cg.contentGroupId === item.contentGroupId) : undefined}
                           />
                         ))}
                     </DroppableWeekColumn>
@@ -575,13 +582,14 @@ export default function PlanningBoardClient({
           {activeDragItem?.data.current?.type === 'contentGroup' && (
             <DraggableContentGroup cg={activeDragItem.data.current.data} isOverlay />
           )}
-          {activeDragItem?.data.current?.type === 'planItem' && (
-            <DraggablePlanItem 
-              item={activeDragItem.data.current.data}
-              contentGroupName={contentGroupMap.get(activeDragItem.data.current.contentGroupId)}
-              isOverlay 
-            />
-          )}
+                     {activeDragItem?.data.current?.type === 'planItem' && activeDragItem.data.current && (
+             <DraggablePlanItem 
+               item={activeDragItem.data.current.data}
+               contentGroupName={contentGroupMap.get(activeDragItem.data.current.contentGroupId)}
+               contentGroupData={activeDragItem.data.current.data?.contentGroupId ? availableContentGroups.find(cg => cg.contentGroupId === activeDragItem.data.current!.data.contentGroupId) : undefined}
+               isOverlay 
+             />
+           )}
         </DragOverlay>
       </div>
     </DndContext>
