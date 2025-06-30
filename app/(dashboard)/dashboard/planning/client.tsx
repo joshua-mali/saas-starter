@@ -15,7 +15,7 @@ import {
     type Term
 } from '@/lib/db/schema'
 import { useSearchParams } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 // DND Imports
@@ -203,6 +203,9 @@ export default function PlanningBoardClient({
   const [activeDragItem, setActiveDragItem] = useState<Active | null>(null);
   const [selectedTermNumber, setSelectedTermNumber] = useState<number | null>(terms[0]?.termNumber ?? null);
 
+  // Ref for the content groups scroll container
+  const contentScrollRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     setPlanItems(initialPlanItems);
     setClassData(initialClassData);
@@ -292,6 +295,9 @@ export default function PlanningBoardClient({
         const contentGroupId = active.data.current?.contentGroupId as number;
         const weekStartDateString = formatDate(overWeekStartDate);
 
+        // Preserve scroll position
+        const scrollTop = contentScrollRef.current?.scrollTop || 0;
+
         // Optimistic Update: Add a temporary item
         const tempId = `optimistic-${Date.now()}`;
         const optimisticItem: ClassCurriculumPlanItem = {
@@ -304,6 +310,13 @@ export default function PlanningBoardClient({
             updatedAt: new Date(),
         };
         setPlanItems(prev => [...prev, optimisticItem]);
+
+        // Restore scroll position after state update
+        setTimeout(() => {
+            if (contentScrollRef.current) {
+                contentScrollRef.current.scrollTop = scrollTop;
+            }
+        }, 0);
 
         // Call Server Action to add the item
         addPlanItem({
@@ -327,11 +340,25 @@ export default function PlanningBoardClient({
                  // Revert optimistic update - compare item.id as string
                  setPlanItems(prev => prev.filter(item => String(item.id) !== tempId));
             }
+            
+            // Restore scroll position after server response
+            setTimeout(() => {
+                if (contentScrollRef.current) {
+                    contentScrollRef.current.scrollTop = scrollTop;
+                }
+            }, 0);
         }).catch(err => {
              console.error("Error calling addPlanItem:", err);
              toast.error('An unexpected error occurred.');
              // Revert optimistic update - compare item.id as string
              setPlanItems(prev => prev.filter(item => String(item.id) !== tempId));
+             
+             // Restore scroll position after error
+             setTimeout(() => {
+                 if (contentScrollRef.current) {
+                     contentScrollRef.current.scrollTop = scrollTop;
+                 }
+             }, 0);
         });
     }
 
@@ -460,7 +487,7 @@ export default function PlanningBoardClient({
             </div>
             
             {/* Content groups area - Make this scrollable */}
-            <div className="flex-grow overflow-y-auto mt-2 pr-2">
+            <div className="flex-grow overflow-y-auto mt-2 pr-2" ref={contentScrollRef}>
               {/* Unplanned Content Groups */}
               {unplannedContentGroups.map(cg => (
                 <DraggableContentGroup key={cg.contentGroupId} cg={cg} />
