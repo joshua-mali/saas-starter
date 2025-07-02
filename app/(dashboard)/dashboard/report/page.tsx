@@ -114,9 +114,9 @@ type ProcessedStudentReportData = {
     studentFirstName: string;
     studentLastName: string;
     overallAverage: number | null;
-    outcomeAverages: Map<number, { name: string; average: number | null }>;
-    topContentGroups: Array<{ id: number; name: string; gradeName: string | null }>;
-    bottomContentGroups: Array<{ id: number; name: string; gradeName: string | null }>;
+    subjectAverages: Map<number, { name: string; average: number | null; outcomes: Map<number, { name: string; average: number | null }> }>;
+    topContentGroupsBySubject: Map<number, Array<{ id: number; name: string; gradeName: string | null }>>;
+    bottomContentGroupsBySubject: Map<number, Array<{ id: number; name: string; gradeName: string | null }>>;
 };
 
 type AssessmentMap = Map<string, number>; // key: "group-<id>" or "point-<id>", value: gradeScaleId
@@ -293,42 +293,73 @@ function processStudentGradesForReport(
 
     console.log(`Calculated Overall Average for student ${student.id}: ${overallAverage}`); // Log overall average
 
-    // 5. Extract Outcome Averages
-    const outcomeAverages = new Map<number, { name: string; average: number | null }>();
+        // 5. Extract Subject and Outcome Averages (Grouped by Subject)
+    const subjectAverages = new Map<number, { name: string; average: number | null; outcomes: Map<number, { name: string; average: number | null }> }>();
+    const contentGroupsBySubject = new Map<number, ProcessedNode[]>();
+    
     for (const subjectId in structuredHierarchy) {
         const subjectNode = structuredHierarchy[subjectId];
+        const outcomeMap = new Map<number, { name: string; average: number | null }>();
+        const subjectContentGroups: ProcessedNode[] = [];
+        
+        // Collect outcomes for this subject
         for (const outcomeId in subjectNode.children) {
             const outcomeNode = subjectNode.children[outcomeId];
-            if (!outcomeAverages.has(outcomeNode.id)) { // Avoid duplicates if hierarchy is weird
-                 outcomeAverages.set(outcomeNode.id, { 
-                     name: outcomeNode.name, 
-                     average: outcomeNode.averageGrade ?? null 
-                 });
+            outcomeMap.set(outcomeNode.id, { 
+                name: outcomeNode.name, 
+                average: outcomeNode.averageGrade ?? null 
+            });
+            
+            // Collect content groups from this outcome for subject-specific top/bottom lists
+            function collectContentGroups(node: ProcessedNode) {
+                if (node.type === 'contentGroup') {
+                    subjectContentGroups.push(node);
+                }
+                for (const childId in node.children) {
+                    collectContentGroups(node.children[childId]);
+                }
             }
+            collectContentGroups(outcomeNode);
         }
+        
+        subjectAverages.set(parseInt(subjectId), {
+            name: subjectNode.name,
+            average: subjectNode.averageGrade ?? null,
+            outcomes: outcomeMap
+        });
+        
+        contentGroupsBySubject.set(parseInt(subjectId), subjectContentGroups);
     }
 
-    console.log(`Extracted Outcome Averages for student ${student.id}:`, outcomeAverages); // Log outcome map
+    console.log(`Extracted Subject Averages for student ${student.id}:`, subjectAverages); // Log subject map
 
-    // 6. Determine Top/Bottom Content Groups
-    const gradedContentGroups = allContentGroups
-        .filter(cg => cg.numericValue !== null)
-        .sort((a, b) => (b.numericValue!) - (a.numericValue!)); // Sort descending by numeric value
+    // 6. Determine Top/Bottom Content Groups by Subject
+    const topContentGroupsBySubject = new Map<number, Array<{ id: number; name: string; gradeName: string | null }>>();
+    const bottomContentGroupsBySubject = new Map<number, Array<{ id: number; name: string; gradeName: string | null }>>();
     
-    // --- ADDED LOGGING --- 
-    console.log(`Graded Content Groups for student ${student.id} (Count: ${gradedContentGroups.length}):`, gradedContentGroups.map(cg => ({ name: cg.name, avg: cg.averageGrade, num: cg.numericValue, grade: cg.gradeName })));
-    // --- END ADDED LOGGING ---
+    for (const [subjectId, contentGroups] of contentGroupsBySubject) {
+        const gradedContentGroups = contentGroups
+            .filter(cg => cg.numericValue !== null)
+            .sort((a, b) => (b.numericValue!) - (a.numericValue!)); // Sort descending by numeric value
+        
+        // --- ADDED LOGGING --- 
+        console.log(`Graded Content Groups for student ${student.id} in subject ${subjectId} (Count: ${gradedContentGroups.length}):`, gradedContentGroups.map(cg => ({ name: cg.name, avg: cg.averageGrade, num: cg.numericValue, grade: cg.gradeName })));
+        // --- END ADDED LOGGING ---
 
-    const topContentGroups = gradedContentGroups.slice(0, 3).map(cg => ({ 
-        id: cg.id, 
-        name: cg.name, 
-        gradeName: cg.gradeName ?? null // Ensure null instead of undefined
-    }));
-    const bottomContentGroups = gradedContentGroups.slice(-3).reverse().map(cg => ({ // reverse to show lowest first
-        id: cg.id, 
-        name: cg.name, 
-        gradeName: cg.gradeName ?? null // Ensure null instead of undefined
-    })); 
+        const topGroups = gradedContentGroups.slice(0, 3).map(cg => ({ 
+            id: cg.id, 
+            name: cg.name, 
+            gradeName: cg.gradeName ?? null
+        }));
+        const bottomGroups = gradedContentGroups.slice(-3).reverse().map(cg => ({ // reverse to show lowest first
+            id: cg.id, 
+            name: cg.name, 
+            gradeName: cg.gradeName ?? null
+        }));
+        
+        topContentGroupsBySubject.set(subjectId, topGroups);
+        bottomContentGroupsBySubject.set(subjectId, bottomGroups);
+    }
 
     // 7. Assemble Final Report Data
     return {
@@ -336,9 +367,9 @@ function processStudentGradesForReport(
         studentFirstName: student.firstName,
         studentLastName: student.lastName,
         overallAverage: overallAverage,
-        outcomeAverages: outcomeAverages,
-        topContentGroups: topContentGroups,
-        bottomContentGroups: bottomContentGroups
+        subjectAverages: subjectAverages,
+        topContentGroupsBySubject: topContentGroupsBySubject,
+        bottomContentGroupsBySubject: bottomContentGroupsBySubject
     };
 }
 
@@ -425,16 +456,28 @@ export default async function ClassReportPage({ searchParams: searchParamsPromis
       );
   });
 
-  // --- Extract Outcome Headers for the Table ---
-  // Get unique outcomes from the hierarchy (more reliable than processing results)
-  const outcomeHeadersMap = new Map<number, string>();
+  // --- Extract Subject Headers for the Table ---
+  // Get unique subjects and their outcomes from the hierarchy
+  const subjectHeadersMap = new Map<number, { name: string; outcomes: Array<{ id: number; name: string }> }>();
   hierarchyData.forEach(item => {
-      if (item.outcomeId && item.outcomeName && !outcomeHeadersMap.has(item.outcomeId)) {
-          outcomeHeadersMap.set(item.outcomeId, item.outcomeName);
+      if (item.subjectId && item.subjectName) {
+          if (!subjectHeadersMap.has(item.subjectId)) {
+              subjectHeadersMap.set(item.subjectId, { name: item.subjectName, outcomes: [] });
+          }
+          
+          const subject = subjectHeadersMap.get(item.subjectId)!;
+          if (item.outcomeId && item.outcomeName && !subject.outcomes.some(o => o.id === item.outcomeId)) {
+              subject.outcomes.push({ id: item.outcomeId, name: item.outcomeName });
+          }
       }
   });
-  const outcomeHeaders = Array.from(outcomeHeadersMap.entries()).map(([id, name]) => ({ id, name }))
-                           .sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically for consistency
+  
+  // Sort subjects and their outcomes
+  const subjectHeaders = Array.from(subjectHeadersMap.entries()).map(([id, data]) => ({
+      id,
+      name: data.name,
+      outcomes: data.outcomes.sort((a, b) => a.name.localeCompare(b.name))
+  })).sort((a, b) => a.name.localeCompare(b.name));
 
   console.log("Server Component: Passing", studentReportData.length, "processed students to client.");
   
@@ -451,7 +494,7 @@ export default async function ClassReportPage({ searchParams: searchParamsPromis
           <ClassReportClient 
               classId={classId}
               studentReportData={studentReportData}
-              outcomeHeaders={outcomeHeaders}
+              subjectHeaders={subjectHeaders}
            />
       </div>
   );
