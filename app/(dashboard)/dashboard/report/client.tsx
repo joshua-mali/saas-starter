@@ -49,7 +49,7 @@ export default function ClassReportClient({ classId, studentReportData, subjectH
                     ))}
                     {subjectHeaders.map(subject => (
                         <TableHead key={`subject-top-bottom-${subject.id}`} colSpan={2} className="text-center border-b">
-                            {subject.name} - Top/Bottom 3
+                            {subject.name}
                         </TableHead>
                     ))}
                 </TableRow>
@@ -64,8 +64,8 @@ export default function ClassReportClient({ classId, studentReportData, subjectH
                     )}
                     {subjectHeaders.map(subject => (
                         <React.Fragment key={`top-bottom-${subject.id}`}>
-                            <TableHead className="text-center text-xs">Top 3</TableHead>
-                            <TableHead className="text-center text-xs">Bottom 3</TableHead>
+                            <TableHead className="text-center text-xs">Ares of Success</TableHead>
+                            <TableHead className="text-center text-xs">Areas for Development</TableHead>
                         </React.Fragment>
                     ))}
                 </TableRow>

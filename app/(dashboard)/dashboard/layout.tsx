@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import {
+  BarChart3,
   BookOpen,
   ClipboardCheck,
   HomeIcon,
@@ -9,7 +10,7 @@ import {
   Menu,
   Settings,
   StickyNote,
-  UsersRound,
+  UsersRound
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -28,9 +29,10 @@ export default function DashboardLayout({
   const navItems = [
     { href: "/dashboard", icon: HomeIcon, label: "Home" },
     { href: "/dashboard/classes", icon: BookOpen, label: "Classes" },
+    { href: "/dashboard/students", icon: UsersRound, label: "Students" },
     { href: "/dashboard/planning", icon: LayoutPanelLeft, label: "Planning" },
     { href: "/dashboard/grading", icon: ClipboardCheck, label: "Grading" },
-    { href: "/dashboard/students", icon: UsersRound, label: "Students" },
+    { href: "/dashboard/report", icon: BarChart3, label: "Reports" },
     { href: "/dashboard/notes", icon: StickyNote, label: "Notes" },
     { href: "/dashboard/settings", icon: Settings, label: "Settings" },
   ];

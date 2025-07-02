@@ -166,9 +166,10 @@ function DraggablePlanItem({ item, contentGroupName, contentGroupData, isOverlay
 // --- Droppable Week Column Component ---
 interface DroppableWeekColumnProps {
   weekStartDate: Date;
+  weekNumber: number;
   children: React.ReactNode;
 }
-function DroppableWeekColumn({ weekStartDate, children }: DroppableWeekColumnProps) {
+function DroppableWeekColumn({ weekStartDate, weekNumber, children }: DroppableWeekColumnProps) {
   const formattedDate = weekStartDate.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
   const id = `week-${weekStartDate.toISOString()}`;
   const { isOver, setNodeRef } = useDroppable({ id: id, data: { type: 'weekColumn', weekStartDate } });
@@ -181,7 +182,10 @@ function DroppableWeekColumn({ weekStartDate, children }: DroppableWeekColumnPro
         isOver ? "bg-primary/10 border-primary" : "bg-muted/40"
       )}
     >
-      <h3 className="mb-2 text-center font-medium flex-shrink-0">Week of {formattedDate}</h3>
+      <div className="mb-2 text-center flex-shrink-0">
+        <h3 className="font-medium">Week {weekNumber}</h3>
+        <p className="text-sm text-muted-foreground">Starting {formattedDate}</p>
+      </div>
       <div className="flex-grow overflow-y-auto">
         <div className="space-y-1"> 
           {children}
@@ -558,8 +562,12 @@ export default function PlanningBoardClient({
               /* Make this scrollable horizontally */
               <div className="flex-1 overflow-x-auto">
                 <div className="flex flex-nowrap space-x-2 p-2 h-full min-h-full">
-                  {weeksInSelectedTerm.map(week => (
-                    <DroppableWeekColumn key={week.toISOString()} weekStartDate={week}>
+                  {weeksInSelectedTerm.map((week, index) => (
+                    <DroppableWeekColumn 
+                      key={week.toISOString()} 
+                      weekStartDate={week}
+                      weekNumber={index + 1}
+                    >
                       {planItems
                         .filter(item => formatDate(item.weekStartDate) === formatDate(week))
                         .map(item => (

@@ -230,7 +230,7 @@ export default function StudentOverviewClient({
                     </CardHeader>
                     <CardContent className="text-sm space-y-4 overflow-y-auto">
                         <div>
-                            <h4 className="font-semibold mb-1">Top 3 Content Groups</h4>
+                            <h4 className="font-semibold mb-1">Areas of Success</h4>
                             {topContentGroups.length > 0 ? (
                                 <ul className="list-disc list-inside space-y-1">
                                     {topContentGroups.map(cg => (
@@ -247,7 +247,7 @@ export default function StudentOverviewClient({
                             )}
                         </div>
                         <div>
-                            <h4 className="font-semibold mb-1">Bottom 3 Content Groups</h4>
+                            <h4 className="font-semibold mb-1">Areas for Development</h4>
                             {bottomContentGroups.length > 0 ? (
                                 <ul className="list-disc list-inside space-y-1">
                                     {bottomContentGroups.map(cg => (
