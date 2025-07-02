@@ -125,8 +125,10 @@ async function getGradingData(
             orderBy: (enrollments, { asc }) => [asc(enrollments.studentId)],
         }),
 
-        // Get grade scales
-        db.select().from(gradeScalesTable).orderBy(gradeScalesTable.numericValue),
+        // Get grade scales - FIXED: Filter by specific class ID to show only scales for this class
+        db.select().from(gradeScalesTable)
+            .where(eq(gradeScalesTable.classId, classId))
+            .orderBy(gradeScalesTable.numericValue),
 
         // Get planned items for the week
         db.query.classCurriculumPlan.findMany({
