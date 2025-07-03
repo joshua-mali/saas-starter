@@ -27,10 +27,10 @@ import {
     type StudentEnrollment,
     type Term
 } from '@/lib/db/schema';
-import { ChevronLeft, ChevronRight, MessageSquare } from "lucide-react";
+import { ChevronLeft, ChevronRight, MessageSquare, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { Component, memo, ReactNode, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { toast } from "sonner";
 import { saveAssessment } from "./actions"; // Import the server action
 
@@ -220,6 +220,69 @@ const GradeCell = memo(({
 
 GradeCell.displayName = 'GradeCell';
 
+// Error Boundary Component to catch React errors and prevent blank pages
+interface ErrorBoundaryState {
+    hasError: boolean;
+    error?: Error;
+}
+
+class ErrorBoundary extends Component<
+    { children: ReactNode; fallback?: ReactNode },
+    ErrorBoundaryState
+> {
+    constructor(props: { children: ReactNode; fallback?: ReactNode }) {
+        super(props);
+        this.state = { hasError: false };
+    }
+
+    static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+        console.error('[ErrorBoundary] Caught error:', error);
+        return { hasError: true, error };
+    }
+
+    componentDidCatch(error: Error, errorInfo: any) {
+        console.error('[ErrorBoundary] Component error details:', {
+            error,
+            errorInfo,
+            stack: error.stack
+        });
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return this.props.fallback || (
+                <div className="flex flex-col items-center justify-center h-96 space-y-4 p-8">
+                    <div className="text-center">
+                        <h2 className="text-lg font-semibold text-red-600 mb-2">
+                            Something went wrong
+                        </h2>
+                        <p className="text-gray-600 mb-4">
+                            An error occurred while loading the grading table. Please try refreshing the page.
+                        </p>
+                        {this.state.error && (
+                            <details className="text-sm text-gray-500 bg-gray-50 p-3 rounded">
+                                <summary className="cursor-pointer">Error Details</summary>
+                                <pre className="mt-2 whitespace-pre-wrap">
+                                    {this.state.error.message}
+                                </pre>
+                            </details>
+                        )}
+                    </div>
+                    <Button 
+                        onClick={() => window.location.reload()} 
+                        className="flex items-center space-x-2"
+                    >
+                        <RefreshCw className="h-4 w-4" />
+                        <span>Refresh Page</span>
+                    </Button>
+                </div>
+            );
+        }
+
+        return this.props.children;
+    }
+}
+
 export default function GradingTableClient({
     classData: initialClassData,
     students: initialStudents,
@@ -348,10 +411,20 @@ export default function GradingTableClient({
         contentGroupId: number,
         newGradeScaleId: number | null
     ) => {
+        console.log('[handleGradeChange] Called with:', {
+            studentEnrollmentId,
+            classCurriculumPlanId,
+            contentGroupId,
+            newGradeScaleId,
+            currentClassId
+        });
+
         if (!currentClassId) {
+            console.error('[handleGradeChange] Missing classId');
             toast.error("Cannot save grade: Class ID is missing.");
             return; 
         }
+        
         // Find if an assessment already exists for this cell
         const existingAssessmentIndex = assessments.findIndex(
             a => a.studentEnrollmentId === studentEnrollmentId &&
@@ -360,99 +433,143 @@ export default function GradingTableClient({
         );
         const existingAssessment = existingAssessmentIndex !== -1 ? assessments[existingAssessmentIndex] : null;
 
+        console.log('[handleGradeChange] Existing assessment:', existingAssessment?.id || 'none');
+
         // Get the current notes for this cell from ref (most up-to-date)
         const cellKey = `${studentEnrollmentId}-${classCurriculumPlanId}`;
         const currentNotes = cellNotesRef.current[cellKey] || existingAssessment?.notes || '';
 
         // Prevent redundant updates
-        if (existingAssessment?.gradeScaleId === newGradeScaleId && existingAssessment?.notes === currentNotes) return;
-
-        // Optimistic Update
-        const originalAssessments = [...assessments];
-        let optimisticAssessment: StudentAssessment | null = null;
-
-        if (newGradeScaleId === null) {
-            // Removing the grade - optimistically filter it out
-            if (existingAssessment) {
-                setAssessments(prev => prev.filter(a => a.id !== existingAssessment.id));
-                // Clear notes from local state as well
-                delete cellNotesRef.current[cellKey];
-                setCellNotes(prev => {
-                    const newNotes = { ...prev };
-                    delete newNotes[cellKey];
-                    return newNotes;
-                });
-                // TODO: Implement deleteAssessment server action if needed
-                toast.info('Grade removed (Deletion not yet implemented)');
-                return; // Stop here until deletion is implemented
-            } else {
-                return; // Nothing to remove
-            }
-        } else {
-            // Adding or updating the grade
-            optimisticAssessment = {
-                id: existingAssessment?.id ?? `optimistic-${Date.now()}` as any,
-                studentEnrollmentId,
-                classCurriculumPlanId,
-                contentGroupId,
-                contentPointId: null,
-                gradeScaleId: newGradeScaleId,
-                assessmentDate: currentWeek,
-                notes: currentNotes,
-                createdAt: existingAssessment?.createdAt ?? new Date(),
-                updatedAt: new Date(),
-            };
-
-            if (existingAssessment) {
-                // Update existing assessment optimistically
-                setAssessments(prev => prev.map(a => a.id === existingAssessment.id ? optimisticAssessment! : a));
-            } else {
-                // Add new assessment optimistically
-                setAssessments(prev => [...prev, optimisticAssessment!]);
-            }
+        if (existingAssessment?.gradeScaleId === newGradeScaleId && existingAssessment?.notes === currentNotes) {
+            console.log('[handleGradeChange] No change needed, skipping');
+            return;
         }
 
-        // Call Server Action (ensure it uses the derived currentClassId)
-        startTransition(() => {
-            saveAssessment({
-                classId: currentClassId, // Use derived currentClassId
-                studentEnrollmentId,
-                classCurriculumPlanId,
-                contentGroupId,
-                contentPointId: null, // Group-level
-                gradeScaleId: newGradeScaleId, // Assured not null by logic above
-                notes: currentNotes,
-                assessmentIdToUpdate: existingAssessment?.id, // Pass ID if updating
-                weekStartDate: formatDate(currentWeek) // Use derived currentWeek
-            }).then(result => {
-                if (result.error) {
-                    toast.error(`Failed to save grade: ${result.error}`);
-                    // Revert optimistic update on error
-                    setAssessments(originalAssessments);
-                } else if (result.success && result.savedAssessment) {
-                    toast.success('Grade saved!');
-                    // Update state with the actual assessment from server (replaces optimistic)
-                    setAssessments(prev => {
-                        const index = prev.findIndex(a =>
-                            a.studentEnrollmentId === result.savedAssessment!.studentEnrollmentId &&
-                            a.classCurriculumPlanId === result.savedAssessment!.classCurriculumPlanId &&
-                            a.contentPointId === result.savedAssessment!.contentPointId
-                        );
-                        if (index !== -1) {
-                            const newState = [...prev];
-                            newState[index] = result.savedAssessment!;
-                            return newState;
-                        } else {
-                            // Should have been added optimistically, but ensure it's there
-                            return [...prev.filter(a => typeof a.id === 'number'), result.savedAssessment!];
-                        }
+        // Store original state for potential rollback
+        const originalAssessments = [...assessments];
+        const originalCellNotes = { ...cellNotesRef.current };
+        let optimisticAssessment: StudentAssessment | null = null;
+
+        try {
+            if (newGradeScaleId === null) {
+                console.log('[handleGradeChange] Removing grade');
+                // Removing the grade - optimistically filter it out
+                if (existingAssessment) {
+                    setAssessments(prev => prev.filter(a => a.id !== existingAssessment.id));
+                    // Clear notes from local state as well
+                    delete cellNotesRef.current[cellKey];
+                    setCellNotes(prev => {
+                        const newNotes = { ...prev };
+                        delete newNotes[cellKey];
+                        return newNotes;
                     });
+                    // TODO: Implement deleteAssessment server action if needed
+                    toast.info('Grade removed (Deletion not yet implemented)');
+                    return; // Stop here until deletion is implemented
                 } else {
-                    // Handle unexpected success case without data
-                    setAssessments(originalAssessments);
+                    console.log('[handleGradeChange] Nothing to remove');
+                    return; // Nothing to remove
                 }
+            } else {
+                console.log('[handleGradeChange] Adding/updating grade');
+                // Adding or updating the grade
+                optimisticAssessment = {
+                    id: existingAssessment?.id ?? `optimistic-${Date.now()}` as any,
+                    studentEnrollmentId,
+                    classCurriculumPlanId,
+                    contentGroupId,
+                    contentPointId: null,
+                    gradeScaleId: newGradeScaleId,
+                    assessmentDate: currentWeek,
+                    notes: currentNotes,
+                    createdAt: existingAssessment?.createdAt ?? new Date(),
+                    updatedAt: new Date(),
+                };
+
+                if (existingAssessment) {
+                    // Update existing assessment optimistically
+                    setAssessments(prev => prev.map(a => a.id === existingAssessment.id ? optimisticAssessment! : a));
+                } else {
+                    // Add new assessment optimistically
+                    setAssessments(prev => [...prev, optimisticAssessment!]);
+                }
+            }
+
+            console.log('[handleGradeChange] Starting server action');
+
+            // Call Server Action with enhanced error handling
+            startTransition(() => {
+                saveAssessment({
+                    classId: currentClassId,
+                    studentEnrollmentId,
+                    classCurriculumPlanId,
+                    contentGroupId,
+                    contentPointId: null, // Group-level
+                    gradeScaleId: newGradeScaleId,
+                    notes: currentNotes,
+                    assessmentIdToUpdate: existingAssessment?.id,
+                    weekStartDate: formatDate(currentWeek)
+                }).then(result => {
+                    console.log('[handleGradeChange] Server action result:', result);
+                    
+                    if (result.error) {
+                        console.error('[handleGradeChange] Server action error:', result.error);
+                        toast.error(`Failed to save grade: ${result.error}`);
+                        
+                        // Revert optimistic update on error
+                        console.log('[handleGradeChange] Reverting optimistic update');
+                        setAssessments(originalAssessments);
+                        cellNotesRef.current = originalCellNotes;
+                        setCellNotes(prev => ({ ...prev, ...originalCellNotes }));
+                        
+                    } else if (result.success && result.savedAssessment) {
+                        console.log('[handleGradeChange] Grade saved successfully:', result.savedAssessment.id);
+                        toast.success('Grade saved!');
+                        
+                        // Update state with the actual assessment from server (replaces optimistic)
+                        setAssessments(prev => {
+                            const index = prev.findIndex(a =>
+                                a.studentEnrollmentId === result.savedAssessment!.studentEnrollmentId &&
+                                a.classCurriculumPlanId === result.savedAssessment!.classCurriculumPlanId &&
+                                a.contentPointId === result.savedAssessment!.contentPointId
+                            );
+                            if (index !== -1) {
+                                const newState = [...prev];
+                                newState[index] = result.savedAssessment!;
+                                return newState;
+                            } else {
+                                // Should have been added optimistically, but ensure it's there
+                                return [...prev.filter(a => typeof a.id === 'number'), result.savedAssessment!];
+                            }
+                        });
+                    } else {
+                        console.error('[handleGradeChange] Unexpected server response:', result);
+                        // Handle unexpected success case without data
+                        toast.error('Unexpected response from server. Please refresh and try again.');
+                        setAssessments(originalAssessments);
+                        cellNotesRef.current = originalCellNotes;
+                        setCellNotes(prev => ({ ...prev, ...originalCellNotes }));
+                    }
+                }).catch(serverError => {
+                    console.error('[handleGradeChange] Server action failed with exception:', serverError);
+                    toast.error('Failed to save grade. Please check your connection and try again.');
+                    
+                    // Revert optimistic update on exception
+                    setAssessments(originalAssessments);
+                    cellNotesRef.current = originalCellNotes;
+                    setCellNotes(prev => ({ ...prev, ...originalCellNotes }));
+                });
             });
-        });
+
+        } catch (clientError) {
+            console.error('[handleGradeChange] Client-side error:', clientError);
+            toast.error('An unexpected error occurred. Please refresh the page and try again.');
+            
+            // Revert any changes
+            setAssessments(originalAssessments);
+            cellNotesRef.current = originalCellNotes;
+            setCellNotes(prev => ({ ...prev, ...originalCellNotes }));
+        }
     }, [currentClassId, assessments, currentWeek, cellNotesRef]);
 
     // --- Notes Change Handler (optimized for performance) ---
@@ -520,169 +637,115 @@ export default function GradingTableClient({
     }
 
     return (
-        <div className="space-y-4">
-            {/* Header Section: Class Name, Week Navigation */}
-            <div className="flex flex-wrap justify-between items-center gap-4 px-4 py-2">
-                 {/* Use classData state */}
-                <h1 className="text-xl font-semibold">
-                    Grading: {classData?.name ?? 'Loading...'} ({classData?.calendarYear})
-                </h1>
-                <div className="flex items-center space-x-2">
-                    <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={handlePreviousWeek}
-                        disabled={!canGoPrev || isPending}
-                    >
-                        <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <Select
-                        value={currentWeekFormatted} // Use formatted string derived from currentWeek state
-                        onValueChange={(weekString) => {
-                            if (weekString) navigateToWeek(new Date(weekString + 'T00:00:00'));
-                        }}
-                        disabled={isPending}
-                    >
-                        <SelectTrigger className="w-[250px]">
-                            <SelectValue placeholder="Select Week..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {allWeeks.map((week, globalIndex) => {
-                                const weekStr = formatDate(week);
-                                
-                                // Find the term this week belongs to more accurately
-                                const term = terms.find(t => {
-                                    // Calculate Monday of the week the term starts
-                                    const termStartMonday = new Date(t.startDate);
-                                    const day = termStartMonday.getDay();
-                                    const diff = termStartMonday.getDate() - day + (day === 0 ? -6 : 1);
-                                    termStartMonday.setDate(diff);
-                                    termStartMonday.setHours(0, 0, 0, 0);
-
-                                    // Get term end date
-                                    const termEndDate = new Date(t.endDate);
-                                    termEndDate.setHours(0, 0, 0, 0);
-
-                                    // Check if the current week's Monday falls within the term's effective range
-                                    return week.getTime() >= termStartMonday.getTime() && week.getTime() <= termEndDate.getTime();
-                                });
-
-                                let weekNumberInTerm: number | string = 'N/A';
-                                if (term) {
-                                    // Find the index within allWeeks of the first Monday associated with this term
-                                    const firstWeekOfTermIndex = allWeeks.findIndex(w => {
-                                        const termStartMonday = new Date(term.startDate);
+        <ErrorBoundary>
+            <div className="space-y-4">
+                {/* Header Section: Class Name, Week Navigation */}
+                <div className="flex flex-wrap justify-between items-center gap-4 px-4 py-2">
+                     {/* Use classData state */}
+                    <h1 className="text-xl font-semibold">
+                        Grading: {classData?.name ?? 'Loading...'} ({classData?.calendarYear})
+                    </h1>
+                    <div className="flex items-center space-x-2">
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={handlePreviousWeek}
+                            disabled={!canGoPrev || isPending}
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Select
+                            value={currentWeekFormatted} // Use formatted string derived from currentWeek state
+                            onValueChange={(weekString) => {
+                                if (weekString) navigateToWeek(new Date(weekString + 'T00:00:00'));
+                            }}
+                            disabled={isPending}
+                        >
+                            <SelectTrigger className="w-[250px]">
+                                <SelectValue placeholder="Select Week..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {allWeeks.map((week, globalIndex) => {
+                                    const weekStr = formatDate(week);
+                                    
+                                    // Find the term this week belongs to more accurately
+                                    const term = terms.find(t => {
+                                        // Calculate Monday of the week the term starts
+                                        const termStartMonday = new Date(t.startDate);
                                         const day = termStartMonday.getDay();
                                         const diff = termStartMonday.getDate() - day + (day === 0 ? -6 : 1);
                                         termStartMonday.setDate(diff);
                                         termStartMonday.setHours(0, 0, 0, 0);
-                                        return w.getTime() >= termStartMonday.getTime(); 
+
+                                        // Get term end date
+                                        const termEndDate = new Date(t.endDate);
+                                        termEndDate.setHours(0, 0, 0, 0);
+
+                                        // Check if the current week's Monday falls within the term's effective range
+                                        return week.getTime() >= termStartMonday.getTime() && week.getTime() <= termEndDate.getTime();
                                     });
 
-                                    // Calculate week number relative to the start of the term weeks
-                                    if (firstWeekOfTermIndex !== -1) {
-                                        weekNumberInTerm = globalIndex - firstWeekOfTermIndex + 1;
+                                    let weekNumberInTerm: number | string = 'N/A';
+                                    if (term) {
+                                        // Find the index within allWeeks of the first Monday associated with this term
+                                        const firstWeekOfTermIndex = allWeeks.findIndex(w => {
+                                            const termStartMonday = new Date(term.startDate);
+                                            const day = termStartMonday.getDay();
+                                            const diff = termStartMonday.getDate() - day + (day === 0 ? -6 : 1);
+                                            termStartMonday.setDate(diff);
+                                            termStartMonday.setHours(0, 0, 0, 0);
+                                            return w.getTime() >= termStartMonday.getTime(); 
+                                        });
+
+                                        // Calculate week number relative to the start of the term weeks
+                                        if (firstWeekOfTermIndex !== -1) {
+                                            weekNumberInTerm = globalIndex - firstWeekOfTermIndex + 1;
+                                        }
                                     }
-                                }
-
-                                return (
-                                    <SelectItem key={weekStr} value={weekStr}>
-                                        Week {weekNumberInTerm} {term ? `(Term ${term.termNumber})` : ''} - {weekStr}
-                                    </SelectItem>
-                                );
-                            })}
-                        </SelectContent>
-                    </Select>
-                    <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={handleNextWeek}
-                        disabled={!canGoNext || isPending}
-                    >
-                        <ChevronRight className="h-4 w-4" />
-                    </Button>
-                </div>
-            </div>
-
-            {/* Grading Table */} 
-            {/* Use plannedItems state and students state */}
-            {(plannedItems.length > 0 && students.length > 0) ? (
-                <div className="w-full overflow-x-auto">
-                    <Table className="border w-full min-w-full table-fixed">
-                        <TableHeader>
-                            <TableRow>
-                                {/* Student Column - Fixed width */}
-                                <TableHead
-                                    className="sticky left-0 bg-background z-10 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider align-top border-r"
-                                    style={{
-                                        width: '200px',
-                                        minWidth: '200px',
-                                        maxWidth: '200px'
-                                    }}
-                                >
-                                    Student
-                                </TableHead>
-
-                                {/* Planned Item Columns - Equal width distribution */}
-                                {plannedItems.map((item, index) => (
-                                    <TableHead
-                                        key={item.id}
-                                        className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider align-top"
-                                        style={{
-                                            width: `calc((100% - 200px) / ${plannedItems.length})`,
-                                            minWidth: '140px',
-                                            overflowWrap: 'break-word',
-                                            wordBreak: 'break-word',
-                                            whiteSpace: 'normal'
-                                        }}
-                                        title={item.contentGroup.name}
-                                    >
-                                        {item.contentGroup.name}
-                                    </TableHead>
-                                ))}
-                            </TableRow>
-                        </TableHeader>
-                    <TableBody className="divide-y divide-gray-200 bg-white">
-                        {students.map((enrollment) => (
-                            <TableRow key={enrollment.id}>
-                                {/* Student Cell - Fixed width */}
-                                <TableCell
-                                    className="sticky left-0 bg-white z-10 px-4 py-2 text-sm font-medium align-top"
-                                    style={{
-                                        width: '200px',
-                                        minWidth: '200px',
-                                        maxWidth: '200px'
-                                    }}
-                                >
-                                    <Link 
-                                        href={`/dashboard/students/${enrollment.student.id}?classId=${currentClassId}`}
-                                        className="text-blue-600 hover:text-blue-800 hover:underline"
-                                    >
-                                        {enrollment.student.firstName} {enrollment.student.lastName}
-                                    </Link>
-                                </TableCell>
-
-                                {/* Grading Cells - Equal width distribution */}
-                                {plannedItems.map((item) => {
-                                    // Find assessment in local state
-                                    const existingAssessment = assessments.find(
-                                        a => a.studentEnrollmentId === enrollment.id &&
-                                            a.classCurriculumPlanId === item.id &&
-                                            a.contentPointId === null
-                                    );
-                                    // --- Log matching logic ---
-                                    console.log(`[GradingTable Client Cell] Trying to match: StudentEnrollmentId=${enrollment.id}, PlannedItemId=${item.id}`);
-                                    console.log(`[GradingTable Client Cell] Found Assessment:`, existingAssessment ? { id: existingAssessment.id, gradeId: existingAssessment.gradeScaleId } : null);
-                                    // --- End Logging ---
-                                    // Use state for the select value to reflect optimistic updates
-                                    const currentGradeScaleId = existingAssessment?.gradeScaleId;
-                                    const cellKey = `${enrollment.id}-${item.id}`;
-                                    const hasNotes = cellNotes[cellKey] || existingAssessment?.notes;
 
                                     return (
-                                        <TableCell
+                                        <SelectItem key={weekStr} value={weekStr}>
+                                            Week {weekNumberInTerm} {term ? `(Term ${term.termNumber})` : ''} - {weekStr}
+                                        </SelectItem>
+                                    );
+                                })}
+                            </SelectContent>
+                        </Select>
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={handleNextWeek}
+                            disabled={!canGoNext || isPending}
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </div>
+
+                {/* Grading Table */} 
+                {/* Use plannedItems state and students state */}
+                {(plannedItems.length > 0 && students.length > 0) ? (
+                    <div className="w-full overflow-x-auto">
+                        <Table className="border w-full min-w-full table-fixed">
+                            <TableHeader>
+                                <TableRow>
+                                    {/* Student Column - Fixed width */}
+                                    <TableHead
+                                        className="sticky left-0 bg-background z-10 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider align-top border-r"
+                                        style={{
+                                            width: '200px',
+                                            minWidth: '200px',
+                                            maxWidth: '200px'
+                                        }}
+                                    >
+                                        Student
+                                    </TableHead>
+
+                                    {/* Planned Item Columns - Equal width distribution */}
+                                    {plannedItems.map((item, index) => (
+                                        <TableHead
                                             key={item.id}
-                                            className="px-4 py-2 text-sm align-top"
+                                            className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider align-top"
                                             style={{
                                                 width: `calc((100% - 200px) / ${plannedItems.length})`,
                                                 minWidth: '140px',
@@ -690,32 +753,88 @@ export default function GradingTableClient({
                                                 wordBreak: 'break-word',
                                                 whiteSpace: 'normal'
                                             }}
+                                            title={item.contentGroup.name}
                                         >
-                                            <GradeCell
-                                                enrollment={enrollment}
-                                                item={item}
-                                                currentGradeScaleId={currentGradeScaleId}
-                                                hasNotes={hasNotes}
-                                                gradeScales={gradeScales}
-                                                isPending={isPending}
-                                                onGradeChange={handleGradeChange}
-                                                onDropdownClose={handleDropdownClose}
-                                                onNotesChange={handleNotesChange}
-                                                cellNotes={cellNotes}
-                                            />
-                                        </TableCell>
-                                    );
-                                })}
-                                                                </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-                </div>
-            ) : (
-                <p className="text-muted-foreground text-center py-4">
-                    {plannedItems.length === 0 ? "No content planned for this week." : "No students found in this class."}
-                </p>
-            )}
-        </div>
+                                            {item.contentGroup.name}
+                                        </TableHead>
+                                    ))}
+                                </TableRow>
+                            </TableHeader>
+                        <TableBody className="divide-y divide-gray-200 bg-white">
+                            {students.map((enrollment) => (
+                                <TableRow key={enrollment.id}>
+                                    {/* Student Cell - Fixed width */}
+                                    <TableCell
+                                        className="sticky left-0 bg-white z-10 px-4 py-2 text-sm font-medium align-top"
+                                        style={{
+                                            width: '200px',
+                                            minWidth: '200px',
+                                            maxWidth: '200px'
+                                        }}
+                                    >
+                                        <Link 
+                                            href={`/dashboard/students/${enrollment.student.id}?classId=${currentClassId}`}
+                                            className="text-blue-600 hover:text-blue-800 hover:underline"
+                                        >
+                                            {enrollment.student.firstName} {enrollment.student.lastName}
+                                        </Link>
+                                    </TableCell>
+
+                                    {/* Grading Cells - Equal width distribution */}
+                                    {plannedItems.map((item) => {
+                                        // Find assessment in local state
+                                        const existingAssessment = assessments.find(
+                                            a => a.studentEnrollmentId === enrollment.id &&
+                                                a.classCurriculumPlanId === item.id &&
+                                                a.contentPointId === null
+                                        );
+                                        // --- Log matching logic ---
+                                        console.log(`[GradingTable Client Cell] Trying to match: StudentEnrollmentId=${enrollment.id}, PlannedItemId=${item.id}`);
+                                        console.log(`[GradingTable Client Cell] Found Assessment:`, existingAssessment ? { id: existingAssessment.id, gradeId: existingAssessment.gradeScaleId } : null);
+                                        // --- End Logging ---
+                                        // Use state for the select value to reflect optimistic updates
+                                        const currentGradeScaleId = existingAssessment?.gradeScaleId;
+                                        const cellKey = `${enrollment.id}-${item.id}`;
+                                        const hasNotes = cellNotes[cellKey] || existingAssessment?.notes;
+
+                                        return (
+                                            <TableCell
+                                                key={item.id}
+                                                className="px-4 py-2 text-sm align-top"
+                                                style={{
+                                                    width: `calc((100% - 200px) / ${plannedItems.length})`,
+                                                    minWidth: '140px',
+                                                    overflowWrap: 'break-word',
+                                                    wordBreak: 'break-word',
+                                                    whiteSpace: 'normal'
+                                                }}
+                                            >
+                                                <GradeCell
+                                                    enrollment={enrollment}
+                                                    item={item}
+                                                    currentGradeScaleId={currentGradeScaleId}
+                                                    hasNotes={hasNotes}
+                                                    gradeScales={gradeScales}
+                                                    isPending={isPending}
+                                                    onGradeChange={handleGradeChange}
+                                                    onDropdownClose={handleDropdownClose}
+                                                    onNotesChange={handleNotesChange}
+                                                    cellNotes={cellNotes}
+                                                />
+                                            </TableCell>
+                                        );
+                                    })}
+                                                                    </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                    </div>
+                ) : (
+                    <p className="text-muted-foreground text-center py-4">
+                        {plannedItems.length === 0 ? "No content planned for this week." : "No students found in this class."}
+                    </p>
+                )}
+            </div>
+        </ErrorBoundary>
     );
 } 
