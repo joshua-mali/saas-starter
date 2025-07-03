@@ -53,11 +53,11 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Define paths that require authentication
-  const protectedPaths = ['/', '/dashboard']
+  const protectedPaths = ['/dashboard']
 
   // Check if the current path starts with any of the protected paths
   const isProtectedRoute =
-    pathname === '/' || pathname.startsWith('/dashboard')
+    pathname.startsWith('/dashboard')
     // Add other top-level protected routes here if needed in the future
 
   // Allow access to static assets and auth routes regardless of session
@@ -65,6 +65,8 @@ export async function middleware(request: NextRequest) {
       pathname.startsWith('/api') || 
       pathname.startsWith('/auth') || // Assuming /auth contains login/signup/etc.
       pathname.startsWith('/sign-in') || // Explicitly allow sign-in page
+      pathname.startsWith('/sign-up') || // Explicitly allow sign-up page
+      pathname.startsWith('/pricing') || // Allow pricing page
       pathname.endsWith('.ico') || 
       pathname.endsWith('.svg')
       ) { 
@@ -78,10 +80,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl)
   }
 
-  // If user is authenticated and tries to access auth routes, redirect to home
+  // If user is authenticated and tries to access auth routes, redirect to dashboard
   // (Prevents logged-in users from seeing login/signup pages)
-  if (session && (pathname.startsWith('/sign-in') || pathname.startsWith('/auth'))) {
-     return NextResponse.redirect(new URL('/', request.url));
+  if (session && (pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up') || pathname.startsWith('/auth'))) {
+     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
   return response

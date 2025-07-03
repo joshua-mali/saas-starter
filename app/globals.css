@@ -9,59 +9,60 @@
 @variant dark (&:is(.dark *));
 
 @theme {
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
-
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
-
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
-
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
-
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-
-  --color-chart-1: hsl(var(--chart-1));
-  --color-chart-2: hsl(var(--chart-2));
-  --color-chart-3: hsl(var(--chart-3));
-  --color-chart-4: hsl(var(--chart-4));
-  --color-chart-5: hsl(var(--chart-5));
-
-  --color-sidebar: hsl(var(--sidebar-background));
-  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
-  --color-sidebar-primary: hsl(var(--sidebar-primary));
-  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
-  --color-sidebar-accent: hsl(var(--sidebar-accent));
-  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
-  --color-sidebar-border: hsl(var(--sidebar-border));
-  --color-sidebar-ring: hsl(var(--sidebar-ring));
-
-  --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-sm: calc(var(--radius) - 4px);
-
   /* Color Palette from Brand Guide */
   --color-brand: #FD4101; /* blood-orange */
   --color-charcoal: #333333;
   --color-ivory: #FFFAE5;
   --color-dark-grey: #212121;
   --color-white: #FFFFFF;
+
+  /* Theme colors using brand palette */
+  --color-background: var(--color-ivory);
+  --color-foreground: var(--color-dark-grey);
+
+  --color-card: var(--color-white);
+  --color-card-foreground: var(--color-dark-grey);
+
+  --color-popover: var(--color-white);
+  --color-popover-foreground: var(--color-dark-grey);
+
+  --color-primary: var(--color-brand);
+  --color-primary-foreground: var(--color-white);
+
+  --color-secondary: var(--color-charcoal);
+  --color-secondary-foreground: var(--color-white);
+
+  --color-muted: var(--color-ivory);
+  --color-muted-foreground: var(--color-charcoal);
+
+  --color-accent: var(--color-brand);
+  --color-accent-foreground: var(--color-white);
+
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: var(--color-white);
+
+  --color-border: var(--color-charcoal);
+  --color-input: var(--color-white);
+  --color-ring: var(--color-brand);
+
+  --color-chart-1: var(--color-brand);
+  --color-chart-2: var(--color-charcoal);
+  --color-chart-3: var(--color-dark-grey);
+  --color-chart-4: #f59e0b;
+  --color-chart-5: #8b5cf6;
+
+  --color-sidebar: var(--color-white);
+  --color-sidebar-foreground: var(--color-dark-grey);
+  --color-sidebar-primary: var(--color-brand);
+  --color-sidebar-primary-foreground: var(--color-white);
+  --color-sidebar-accent: var(--color-ivory);
+  --color-sidebar-accent-foreground: var(--color-dark-grey);
+  --color-sidebar-border: var(--color-charcoal);
+  --color-sidebar-ring: var(--color-brand);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
 }
 
 /*

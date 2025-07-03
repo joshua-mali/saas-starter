@@ -91,7 +91,7 @@ export default async function PricingPage() {
        {productsWithPrices.length === 0 && (
          <p className="text-center text-gray-600">No pricing plans available at the moment. Please check back later.</p>
        )}
-      <div className={`grid md:grid-cols-${Math.min(productsWithPrices.length, 3)} gap-8 max-w-4xl mx-auto`}>
+      <div className={`grid md:grid-cols-${Math.min(productsWithPrices.length, 2)} gap-8 max-w-4xl mx-auto`}>
         {productsWithPrices.map(product => (
           <PricingCard
             key={product.id}
@@ -112,7 +112,7 @@ export default async function PricingPage() {
 function getFeaturesForPlan(planName: string | null): string[] {
   // Ensure planName is treated as potentially null when accessing PLAN_MEMBER_LIMITS
   const safePlanName = planName ?? '';
-  const memberLimit = PLAN_MEMBER_LIMITS[safePlanName] ?? 3;
+  const memberLimit = PLAN_MEMBER_LIMITS[safePlanName] ?? 1;
 
   const baseFeatures = [
      `${memberLimit} Team Members`,
