@@ -187,9 +187,9 @@ function DeleteClassDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Delete Class: {classItem.name}?</AlertDialogTitle>
           <AlertDialogDescription className="space-y-2">
-            <p>
+            <div>
               <strong>This action cannot be undone.</strong> Deleting this class will permanently remove:
-            </p>
+            </div>
             <ul className="list-disc list-inside space-y-1 text-sm">
               <li>All student enrollments in this class</li>
               <li>All curriculum planning for this class</li>
@@ -197,9 +197,9 @@ function DeleteClassDialog({
               <li>All class-specific grade scales</li>
               <li>All related teacher comments</li>
             </ul>
-            <p className="font-medium text-red-600">
+            <div className="font-medium text-red-600">
               Are you absolutely sure you want to delete "{classItem.name}" ({classItem.calendarYear})?
-            </p>
+            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
