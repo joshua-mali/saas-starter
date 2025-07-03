@@ -48,11 +48,11 @@ async function getClassDetails(classId: string): Promise<(Class & { stage: Stage
     });
 }
 
-async function getAllStudentEnrollmentsForClass(classId: string): Promise<(StudentEnrollment & { student: Student })[]> {
+async function getAllStudentEnrollmentsForClass(classId: string): Promise<(StudentEnrollment & { student: Student | null })[]> {
     return db.query.studentEnrollments.findMany({
         where: eq(studentEnrollments.classId, classId),
         with: {
-            student: true // Include student details
+            student: true // Include student details (can be null if student was deleted)
         }
     });
 }
@@ -427,11 +427,20 @@ export default async function ClassReportPage({ searchParams: searchParamsPromis
     notFound(); 
   }
 
-  const [enrollments, hierarchyData, gradeScalesData] = await Promise.all([
+  const [allEnrollments, hierarchyData, gradeScalesData] = await Promise.all([
     getAllStudentEnrollmentsForClass(classId),
     getFullCurriculumHierarchy(classData.stageId),
     getGradeScalesForTeam(classData.teamId) // Assuming teamId is on classData
   ]);
+
+  // Filter out enrollments where student is null (orphaned enrollments)
+  const enrollments = allEnrollments.filter((enrollment): enrollment is StudentEnrollment & { student: Student } => 
+    enrollment.student !== null
+  );
+  
+  if (allEnrollments.length > enrollments.length) {
+    console.warn(`Found ${allEnrollments.length - enrollments.length} orphaned enrollment(s) with null students in class ${classId}`);
+  }
 
   // --- Fetch Assessments for all students (Can be parallelized further) ---
   const assessmentsPromises = enrollments.map(enrollment => 
