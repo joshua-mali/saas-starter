@@ -273,6 +273,26 @@ export const teacherComments = pgTable('teacher_comments', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const nswTermDates = pgTable('nsw_term_dates', {
+  id: serial('id').primaryKey(),
+  calendarYear: integer('calendar_year').notNull(),
+  termNumber: integer('term_number').notNull(),
+  termName: varchar('term_name', { length: 50 }).notNull(), // "Term 1", "Term 2", etc.
+  startDate: date('start_date').notNull(),
+  endDate: date('end_date').notNull(),
+  division: varchar('division', { length: 20 }).notNull(), // "Eastern" or "Western"
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+  uniqueYearTermDivision: uniqueIndex('nsw_term_dates_unique').on(
+    table.calendarYear,
+    table.termNumber,
+    table.division
+  ),
+}));
+
+// Add unique constraint for year/term/division combination
+
 export const teamsRelations = relations(teams, ({ many }) => ({
   teamMembers: many(teamMembers),
   activityLogs: many(activityLogs),
@@ -496,4 +516,6 @@ export type StudentAssessment = typeof studentAssessments.$inferSelect;
 export type NewStudentAssessment = typeof studentAssessments.$inferInsert;
 
 export type TeacherComment = typeof teacherComments.$inferSelect;
+
+export type NSWTermDate = typeof nswTermDates.$inferSelect;
 export type NewTeacherComment = typeof teacherComments.$inferInsert;

@@ -1,9 +1,9 @@
 'use server'
 
 import { db } from '@/lib/db/drizzle';
-import { gradeScales, NewTerm, teamMembers, terms } from '@/lib/db/schema';
+import { gradeScales, NewTerm, nswTermDates, teamMembers, terms } from '@/lib/db/schema';
 import { createClient } from '@/lib/supabase/server';
-import { eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
@@ -211,4 +211,83 @@ export async function updateGradeScales(prevState: ActionState, formData: FormDa
         console.error("Error updating grade scales:", dbError);
         return { error: 'Database error occurred while updating grade scales.', success: false };
     }
+}
+
+// --- NEW: Load NSW Term Dates Action ---
+export async function loadNSWTermDates(prevState: ActionState, formData: FormData): Promise<ActionState> {
+  const supabase = await createClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return { error: 'User not authenticated', success: false };
+  }
+
+  // Get user's team ID
+  const [userTeam] = await db.select({ teamId: teamMembers.teamId })
+                         .from(teamMembers)
+                         .where(eq(teamMembers.userId, user.id))
+                         .limit(1);
+
+  if (!userTeam || typeof userTeam.teamId !== 'number') {
+    return { error: 'User team not found', success: false };
+  }
+  const teamId = userTeam.teamId;
+
+  // Parse form data
+  const calendarYearStr = formData.get('calendarYear');
+  const division = formData.get('division') as string;
+
+  const calendarYear = parseInt(calendarYearStr as string, 10);
+
+  if (isNaN(calendarYear) || calendarYear < 2000 || calendarYear > 2100) {
+    return { error: 'Invalid calendar year provided.', success: false };
+  }
+
+  if (!division || !['Eastern', 'Western'].includes(division)) {
+    return { error: 'Invalid division. Must be Eastern or Western.', success: false };
+  }
+
+  try {
+    // Get NSW term dates for the specified year and division
+    const nswDates = await db.select()
+      .from(nswTermDates)
+      .where(and(
+        eq(nswTermDates.calendarYear, calendarYear),
+        eq(nswTermDates.division, division)
+      ))
+      .orderBy(asc(nswTermDates.termNumber));
+
+    if (nswDates.length === 0) {
+      return { error: `No NSW term dates found for ${calendarYear} (${division} division).`, success: false };
+    }
+
+    // Convert NSW dates to terms format and upsert
+    await db.transaction(async (tx) => {
+      for (const nswDate of nswDates) {
+        await tx.insert(terms)
+          .values({
+            teamId: teamId,
+            calendarYear: calendarYear,
+            termNumber: nswDate.termNumber,
+            startDate: new Date(nswDate.startDate),
+            endDate: new Date(nswDate.endDate),
+          })
+          .onConflictDoUpdate({
+            target: [terms.teamId, terms.calendarYear, terms.termNumber],
+            set: { 
+              startDate: new Date(nswDate.startDate),
+              endDate: new Date(nswDate.endDate),
+              updatedAt: new Date()
+            } 
+          });
+      }
+    });
+
+    revalidatePath('/dashboard/settings');
+    return { success: true, error: null };
+
+  } catch (error) {
+    console.error("Error loading NSW term dates:", error);
+    return { error: 'Database error occurred while loading NSW term dates.', success: false };
+  }
 } 

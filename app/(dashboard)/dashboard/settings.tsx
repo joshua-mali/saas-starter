@@ -8,10 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { GradeScale, Term } from '@/lib/db/schema';
 import { Loader2, Lock, Trash2 } from 'lucide-react';
-import { startTransition, useActionState, useEffect, useRef } from 'react';
+import { startTransition, useActionState, useEffect, useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { toast } from 'sonner';
-import { saveTermDates, updateGradeScales } from './settings/actions';
+import { loadNSWTermDates, saveTermDates, updateGradeScales } from './settings/actions';
 
 type SettingsProps = {
   initialTerms: Term[];
@@ -68,6 +68,9 @@ export function Settings({ initialTerms, calendarYear, gradeScales, classId }: S
   const [scaleState, scaleAction] = useActionState(updateGradeScales, { error: null, success: false });
   const scaleFormRef = useRef<HTMLFormElement>(null);
 
+  const [division, setDivision] = useState<'Eastern' | 'Western'>('Eastern');
+  const [loadingNSW, setLoadingNSW] = useState(false);
+
   useEffect(() => {
     if (termState.error) {
       toast.error(termState.error);
@@ -112,6 +115,25 @@ export function Settings({ initialTerms, calendarYear, gradeScales, classId }: S
     });
   };
 
+  // NSW Term Dates Loader
+  const showNSWLoader = calendarYear >= 2025 && calendarYear <= 2030;
+  const handleLoadNSW = async () => {
+    if (!window.confirm(`This will overwrite any existing term dates for ${calendarYear}. Continue?`)) return;
+    setLoadingNSW(true);
+    const formData = new FormData();
+    formData.append('calendarYear', String(calendarYear));
+    formData.append('division', division);
+    const result = await loadNSWTermDates({ error: null, success: false }, formData);
+    setLoadingNSW(false);
+    if (result.success) {
+      toast.success('NSW official term dates loaded!');
+      // Optionally, reload the page or refetch terms
+      window.location.reload();
+    } else {
+      toast.error(result.error || 'Failed to load NSW term dates');
+    }
+  };
+
   return (
     <Tabs defaultValue="terms" className="w-full">
       <TabsList className="grid w-full grid-cols-3 mb-6">
@@ -127,6 +149,26 @@ export function Settings({ initialTerms, calendarYear, gradeScales, classId }: S
             <CardDescription>
               Enter the start and end dates for each term in {calendarYear}.
             </CardDescription>
+            {showNSWLoader && (
+              <div className="flex flex-col md:flex-row gap-2 mt-4">
+                <label className="flex items-center gap-2">
+                  <span>NSW Division:</span>
+                  <select
+                    className="border rounded px-2 py-1"
+                    value={division}
+                    onChange={e => setDivision(e.target.value as 'Eastern' | 'Western')}
+                    disabled={loadingNSW}
+                  >
+                    <option value="Eastern">Eastern</option>
+                    <option value="Western">Western</option>
+                  </select>
+                </label>
+                <Button type="button" onClick={handleLoadNSW} disabled={loadingNSW}>
+                  {loadingNSW ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : null}
+                  Load NSW Official Term Dates
+                </Button>
+              </div>
+            )}
           </CardHeader>
           <form ref={termFormRef} action={termAction}>
             <input type="hidden" name="calendarYear" value={calendarYear} />
