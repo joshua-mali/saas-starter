@@ -119,7 +119,7 @@ export const useOnboarding = () => {
     {
       id: 'plan-curriculum',
       title: 'Plan your curriculum',
-      description: 'Organize your teaching content and timeline',
+      description: 'Organise your teaching content and timeline',
       completed: progress.hasCurriculumPlan,
       required: true,
       prerequisite: 'set-term-dates',

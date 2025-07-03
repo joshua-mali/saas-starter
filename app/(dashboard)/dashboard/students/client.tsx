@@ -193,7 +193,10 @@ function DeleteStudentDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete Student: {student.firstName} {student.lastName}?</AlertDialogTitle>
-          <AlertDialogDescription className="space-y-2">
+          <AlertDialogDescription>
+            This action cannot be undone and will permanently remove the student and all associated data.
+          </AlertDialogDescription>
+          <div className="space-y-2 text-sm text-muted-foreground">
             <div>
               <strong>This action cannot be undone.</strong> Deleting this student will permanently remove:
             </div>
@@ -206,7 +209,7 @@ function DeleteStudentDialog({
             <div className="font-medium text-red-600">
               Are you absolutely sure you want to delete {student.firstName} {student.lastName}?
             </div>
-          </AlertDialogDescription>
+          </div>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>

@@ -119,7 +119,7 @@ export default async function LandingPage() {
                 </svg>
               </div>
               <h3 className="text-lg font-semibold text-[var(--color-dark-grey)] mb-2">Curriculum Planning</h3>
-              <p className="text-[var(--color-charcoal)]">Organize and plan your curriculum with drag-and-drop simplicity.</p>
+              <p className="text-[var(--color-charcoal)]">Organise and plan your curriculum with drag-and-drop simplicity.</p>
             </div>
             <div className="text-center">
               <div className="bg-[var(--color-ivory)] w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">

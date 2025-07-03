@@ -186,7 +186,10 @@ function DeleteClassDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete Class: {classItem.name}?</AlertDialogTitle>
-          <AlertDialogDescription className="space-y-2">
+          <AlertDialogDescription>
+            This action cannot be undone and will permanently remove the class and all associated data.
+          </AlertDialogDescription>
+          <div className="space-y-2 text-sm text-muted-foreground">
             <div>
               <strong>This action cannot be undone.</strong> Deleting this class will permanently remove:
             </div>
@@ -200,7 +203,7 @@ function DeleteClassDialog({
             <div className="font-medium text-red-600">
               Are you absolutely sure you want to delete "{classItem.name}" ({classItem.calendarYear})?
             </div>
-          </AlertDialogDescription>
+          </div>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
