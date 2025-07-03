@@ -2,8 +2,11 @@
 
 import { db } from '@/lib/db/drizzle'
 import {
+    classTeachers,
+    studentAssessments,
     studentEnrollments,
     students,
+    teacherComments,
     teamMembers,
     type Student, // Import the specific type if needed
 } from '@/lib/db/schema'
@@ -18,6 +21,19 @@ const addStudentSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
   dateOfBirth: z.string().optional(), // Assuming date string from input type=date
+})
+
+// --- Additional Schemas for Edit and Delete ---
+const updateStudentSchema = z.object({
+  studentId: z.string().uuid('Invalid student ID'),
+  firstName: z.string().min(1, 'First name is required').max(100, 'First name too long'),
+  lastName: z.string().min(1, 'Last name is required').max(100, 'Last name too long'),
+  dateOfBirth: z.string().optional().nullable(), // Date as string from form
+  externalId: z.string().max(100, 'External ID too long').optional().nullable(),
+})
+
+const deleteStudentSchema = z.object({
+  studentId: z.string().uuid('Invalid student ID'),
 })
 
 interface ActionResult {
@@ -243,4 +259,219 @@ export async function addStudentsBatch(
         }
         return { error: 'An unexpected error occurred during the import.' };
     }
+}
+
+// --- Helper: Check if user can modify student ---
+async function canUserModifyStudent(userId: string, studentId: string): Promise<boolean> {
+  try {
+    // Check if user is a teacher of any class where this student is enrolled
+    const result = await db
+      .select({ teacherId: classTeachers.teacherId })
+      .from(classTeachers)
+      .innerJoin(studentEnrollments, eq(classTeachers.classId, studentEnrollments.classId))
+      .where(eq(studentEnrollments.studentId, studentId))
+      .limit(1)
+
+    return result.some(teacher => teacher.teacherId === userId)
+  } catch (error) {
+    console.error('Error checking student permissions:', error)
+    return false
+  }
+}
+
+// --- Helper: Get student deletion impact ---
+async function getStudentDeletionImpact(studentId: string) {
+  try {
+    const [enrollmentsCount, assessmentsCount, commentsCount] = await Promise.all([
+      // Count enrollments
+      db.select({ count: eq(studentEnrollments.studentId, studentId) })
+        .from(studentEnrollments)
+        .where(eq(studentEnrollments.studentId, studentId)),
+      
+      // Count assessments through enrollments
+      db.select({ count: eq(studentEnrollments.studentId, studentId) })
+        .from(studentAssessments)
+        .innerJoin(studentEnrollments, eq(studentAssessments.studentEnrollmentId, studentEnrollments.id))
+        .where(eq(studentEnrollments.studentId, studentId)),
+      
+      // Count teacher comments
+      db.select({ count: eq(teacherComments.studentId, studentId) })
+        .from(teacherComments)
+        .where(eq(teacherComments.studentId, studentId))
+    ])
+
+    return {
+      enrollmentsCount: enrollmentsCount.length,
+      assessmentsCount: assessmentsCount.length,
+      commentsCount: commentsCount.length
+    }
+  } catch (error) {
+    console.error('Error getting deletion impact:', error)
+    return { enrollmentsCount: 0, assessmentsCount: 0, commentsCount: 0 }
+  }
+}
+
+// --- Server Actions ---
+
+export async function updateStudent(
+  prevState: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  console.log('[updateStudent] Starting with form data:', Object.fromEntries(formData))
+  
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    console.error('[updateStudent] User not authenticated')
+    return { error: 'User not authenticated' }
+  }
+
+  const validatedFields = updateStudentSchema.safeParse({
+    studentId: formData.get('studentId'),
+    firstName: formData.get('firstName'),
+    lastName: formData.get('lastName'),
+    dateOfBirth: formData.get('dateOfBirth'),
+    externalId: formData.get('externalId'),
+  })
+
+  if (!validatedFields.success) {
+    console.error('[updateStudent] Validation failed:', validatedFields.error.flatten())
+    const fieldErrors = validatedFields.error.flatten().fieldErrors
+    return {
+      error: fieldErrors.studentId?.[0] ||
+             fieldErrors.firstName?.[0] ||
+             fieldErrors.lastName?.[0] ||
+             fieldErrors.dateOfBirth?.[0] ||
+             fieldErrors.externalId?.[0] ||
+             'Validation failed',
+    }
+  }
+
+  const { studentId, firstName, lastName, dateOfBirth, externalId } = validatedFields.data
+
+  // Check authorization
+  const canModify = await canUserModifyStudent(user.id, studentId)
+  if (!canModify) {
+    console.error('[updateStudent] User not authorized to modify student:', studentId)
+    return { error: 'You are not authorized to modify this student.' }
+  }
+
+  try {
+    const [updatedStudent] = await db
+      .update(students)
+      .set({
+        firstName: firstName,
+        lastName: lastName,
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+        externalId: externalId || null,
+        updatedAt: new Date(),
+      })
+      .where(eq(students.id, studentId))
+      .returning({ id: students.id })
+
+    if (!updatedStudent) {
+      console.error('[updateStudent] Student not found:', studentId)
+      return { error: 'Student not found.' }
+    }
+
+    console.log('[updateStudent] Student updated successfully:', updatedStudent.id)
+    revalidatePath('/dashboard/students')
+    return { error: null, success: true }
+  } catch (error) {
+    console.error('[updateStudent] Database error:', error)
+    return { error: 'An unexpected error occurred while updating the student.' }
+  }
+}
+
+export async function deleteStudent(
+  prevState: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  console.log('[deleteStudent] Starting with form data:', Object.fromEntries(formData))
+  
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    console.error('[deleteStudent] User not authenticated')
+    return { error: 'User not authenticated' }
+  }
+
+  const validatedFields = deleteStudentSchema.safeParse({
+    studentId: formData.get('studentId'),
+  })
+
+  if (!validatedFields.success) {
+    console.error('[deleteStudent] Validation failed:', validatedFields.error.flatten())
+    return { error: 'Invalid student ID provided.' }
+  }
+
+  const { studentId } = validatedFields.data
+
+  // Check authorization
+  const canModify = await canUserModifyStudent(user.id, studentId)
+  if (!canModify) {
+    console.error('[deleteStudent] User not authorized to delete student:', studentId)
+    return { error: 'You are not authorized to delete this student.' }
+  }
+
+  try {
+    // Get deletion impact for logging
+    const impact = await getStudentDeletionImpact(studentId)
+    console.log('[deleteStudent] Deletion impact:', impact)
+
+    // Delete the student (cascade deletes will handle related records)
+    const [deletedStudent] = await db
+      .delete(students)
+      .where(eq(students.id, studentId))
+      .returning({ id: students.id, firstName: students.firstName, lastName: students.lastName })
+
+    if (!deletedStudent) {
+      console.error('[deleteStudent] Student not found:', studentId)
+      return { error: 'Student not found.' }
+    }
+
+    console.log('[deleteStudent] Student deleted successfully:', {
+      id: deletedStudent.id,
+      name: `${deletedStudent.firstName} ${deletedStudent.lastName}`,
+      impact
+    })
+    
+    revalidatePath('/dashboard/students')
+    return { error: null, success: true }
+  } catch (error) {
+    console.error('[deleteStudent] Database error:', error)
+    return { error: 'An unexpected error occurred while deleting the student.' }
+  }
+}
+
+// --- Helper: Get deletion impact for client warning ---
+export async function getStudentDeletionInfo(studentId: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: 'User not authenticated' }
+  }
+
+  // Check authorization
+  const canModify = await canUserModifyStudent(user.id, studentId)
+  if (!canModify) {
+    return { error: 'You are not authorized to view this student information.' }
+  }
+
+  try {
+    const impact = await getStudentDeletionImpact(studentId)
+    return { error: null, ...impact }
+  } catch (error) {
+    console.error('Error getting student deletion info:', error)
+    return { error: 'Failed to get student information.' }
+  }
 } 

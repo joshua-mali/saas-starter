@@ -11,6 +11,9 @@ type StudentListData = {
     studentId: string;
     firstName: string;
     lastName: string;
+    dateOfBirth: Date | null;
+    externalId: string | null;
+    isActive: boolean | null;
 };
 
 // Fetch students enrolled in a specific class
@@ -20,7 +23,9 @@ async function getStudentsForClass(classId: string): Promise<StudentListData[]> 
       studentId: students.id,
       firstName: students.firstName,
       lastName: students.lastName,
-      // Add other student fields if needed by the client
+      dateOfBirth: students.dateOfBirth,
+      externalId: students.externalId,
+      isActive: students.isActive,
     })
     .from(studentEnrollments)
     .innerJoin(students, eq(studentEnrollments.studentId, students.id))

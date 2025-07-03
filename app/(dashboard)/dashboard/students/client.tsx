@@ -1,5 +1,16 @@
 'use client'
 
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
     Card,
@@ -19,13 +30,13 @@ import {
     TableHeader,
     TableRow
 } from "@/components/ui/table"
-import { Upload, UserCog, X } from 'lucide-react'; // For loading indicators and icons
+import { Edit2, Trash2, Upload, UserCog, X } from 'lucide-react'; // For loading indicators and icons
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useActionState, useEffect, useRef, useState } from 'react'
 import { useFormStatus } from 'react-dom'
 import { toast } from 'sonner'
-import { addStudentToClass, addStudentsBatch } from './actions'; // Import batch action
+import { addStudentToClass, addStudentsBatch, deleteStudent, updateStudent } from './actions'; // Import new actions
 
 // Type for student data received from server
 // (Ideally, move this type definition to a shared file)
@@ -34,6 +45,9 @@ type StudentListData = {
     studentId: string;
     firstName: string;
     lastName: string;
+    dateOfBirth: Date | null;
+    externalId: string | null;
+    isActive: boolean | null;
 };
 
 interface StudentsPageClientProps {
@@ -41,12 +55,170 @@ interface StudentsPageClientProps {
   students: StudentListData[];   // Students for the selected class, passed from server
 }
 
-function SubmitButton() {
+function SubmitButton({ action }: { action: 'create' | 'update' | 'delete' }) {
   const { pending } = useFormStatus()
+  
+  const buttonText = {
+    create: pending ? 'Adding Student...' : 'Add Student',
+    update: pending ? 'Updating Student...' : 'Update Student', 
+    delete: pending ? 'Deleting Student...' : 'Delete Student'
+  }
+  
+  const variant = action === 'delete' ? 'destructive' : 'default'
+  
   return (
-    <Button type="submit" disabled={pending} aria-disabled={pending}>
-      {pending ? 'Adding Student...' : 'Add Student'}
+    <Button type="submit" disabled={pending} aria-disabled={pending} variant={variant}>
+      {buttonText[action]}
     </Button>
+  )
+}
+
+// Edit Student Modal Component
+function EditStudentModal({ 
+  student, 
+  onClose 
+}: { 
+  student: StudentListData,
+  onClose: () => void 
+}) {
+  const [state, formAction] = useActionState(updateStudent, { error: null, success: false })
+  const formRef = useRef<HTMLFormElement>(null)
+
+  useEffect(() => {
+    if (state.error) {
+      toast.error(state.error)
+    } else if (state.success) {
+      toast.success('Student updated successfully!')
+      onClose()
+    }
+  }, [state, onClose])
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Edit Student</h2>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        
+        <form ref={formRef} action={formAction} className="space-y-4">
+          <input type="hidden" name="studentId" value={student.studentId} />
+          
+          <div className="space-y-2">
+            <Label htmlFor="edit-firstName">First Name</Label>
+            <Input
+              id="edit-firstName"
+              name="firstName"
+              defaultValue={student.firstName}
+              placeholder="e.g., John"
+              required
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="edit-lastName">Last Name</Label>
+            <Input
+              id="edit-lastName"
+              name="lastName"
+              defaultValue={student.lastName}
+              placeholder="e.g., Doe"
+              required
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="edit-dateOfBirth">Date of Birth</Label>
+            <Input
+              id="edit-dateOfBirth"
+              name="dateOfBirth"
+              type="date"
+              defaultValue={student.dateOfBirth ? student.dateOfBirth.toISOString().split('T')[0] : ''}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="edit-externalId">External ID</Label>
+            <Input
+              id="edit-externalId"
+              name="externalId"
+              placeholder="School ID"
+              defaultValue={student.externalId || ''}
+            />
+          </div>
+          
+          <div className="flex gap-3 pt-4">
+            <SubmitButton action="update" />
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// Delete Student Confirmation Dialog
+function DeleteStudentDialog({ 
+  student, 
+  onConfirm 
+}: { 
+  student: StudentListData,
+  onConfirm: () => void 
+}) {
+  const [state, formAction] = useActionState(deleteStudent, { error: null, success: false })
+  const [isOpen, setIsOpen] = useState(false)
+
+  useEffect(() => {
+    if (state.error) {
+      toast.error(state.error)
+      setIsOpen(false)
+    } else if (state.success) {
+      toast.success('Student deleted successfully!')
+      setIsOpen(false)
+      onConfirm()
+    }
+  }, [state, onConfirm])
+
+  return (
+    <AlertDialog open={isOpen} onOpenChange={setIsOpen}>
+      <AlertDialogTrigger asChild>
+        <Button variant="destructive" size="sm">
+          <Trash2 className="h-4 w-4 mr-1" />
+          Delete
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Student: {student.firstName} {student.lastName}?</AlertDialogTitle>
+          <AlertDialogDescription className="space-y-2">
+            <div>
+              <strong>This action cannot be undone.</strong> Deleting this student will permanently remove:
+            </div>
+            <ul className="list-disc list-inside space-y-1 text-sm">
+              <li>All enrollments in classes</li>
+              <li>All assessments and grades</li>
+              <li>All teacher comments</li>
+              <li>All historical data</li>
+            </ul>
+            <div className="font-medium text-red-600">
+              Are you absolutely sure you want to delete {student.firstName} {student.lastName}?
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <form action={formAction}>
+            <input type="hidden" name="studentId" value={student.studentId} />
+            <AlertDialogAction asChild>
+              <SubmitButton action="delete" />
+            </AlertDialogAction>
+          </form>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 
@@ -56,6 +228,7 @@ export default function StudentsPageClient({
 }: StudentsPageClientProps) {
   const [state, formAction] = useActionState(addStudentToClass, { error: null, success: false });
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingStudent, setEditingStudent] = useState<StudentListData | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -257,7 +430,7 @@ export default function StudentsPageClient({
               </div>
             </CardContent>
             <CardFooter>
-              <SubmitButton />
+              <SubmitButton action="create" />
             </CardFooter>
           </form>
         </Card>
@@ -388,12 +561,28 @@ export default function StudentsPageClient({
                         {student.firstName} {student.lastName}
                       </TableCell>
                       <TableCell className="text-right">
-                        {/* Update link format using derived currentClassId */}
-                        <Link href={`/dashboard/students/${student.studentId}?classId=${currentClassId}`} passHref>
-                            <Button variant="outline" size="sm">
-                                <UserCog className="mr-1 h-4 w-4" /> View Details
-                            </Button>
-                        </Link>
+                        <div className="flex items-center gap-2 justify-end">
+                          {/* Update link format using derived currentClassId */}
+                          <Link href={`/dashboard/students/${student.studentId}?classId=${currentClassId}`} passHref>
+                              <Button variant="outline" size="sm">
+                                  <UserCog className="mr-1 h-4 w-4" /> View Details
+                              </Button>
+                          </Link>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => setEditingStudent(student)}
+                          >
+                            <Edit2 className="h-4 w-4 mr-1" />
+                            Edit
+                          </Button>
+                          <DeleteStudentDialog 
+                            student={student} 
+                            onConfirm={() => {
+                              // The page will automatically revalidate due to revalidatePath in the action
+                            }} 
+                          />
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -409,6 +598,14 @@ export default function StudentsPageClient({
           )}
         </CardContent>
       </Card>
+
+      {/* Edit Student Modal */}
+      {editingStudent && (
+        <EditStudentModal
+          student={editingStudent}
+          onClose={() => setEditingStudent(null)}
+        />
+      )}
     </div>
   )
 } 
