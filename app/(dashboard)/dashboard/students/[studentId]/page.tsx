@@ -10,6 +10,7 @@ import {
     outcomes,
     studentAssessments,
     studentEnrollments,
+    students,
     subjects,
     type Class,
     type GradeScale,
@@ -104,6 +105,26 @@ async function getGradeScalesForTeam(teamId: number): Promise<GradeScale[]> {
     // but for now fetching all. Replace with team-specific query if needed.
     // TODO: Filter by teamId if grade_scales table gets a team_id column
     return db.select().from(gradeScales).orderBy(gradeScales.numericValue);
+}
+
+// Define the type for basic student info for the dropdown
+type StudentBasicInfo = {
+    id: string;
+    firstName: string;
+    lastName: string;
+};
+
+// Fetch all students enrolled in a specific class for the dropdown
+async function getStudentsInClass(classId: string): Promise<StudentBasicInfo[]> {
+    return db.select({
+        id: students.id,
+        firstName: students.firstName,
+        lastName: students.lastName,
+    })
+    .from(studentEnrollments)
+    .innerJoin(students, eq(studentEnrollments.studentId, students.id))
+    .where(eq(studentEnrollments.classId, classId))
+    .orderBy(students.lastName, students.firstName);
 }
 
 // --- Data Processing Helper --- 
@@ -437,10 +458,11 @@ export default async function StudentOverviewPage({
         notFound();
     }
 
-    const [hierarchyData, assessmentsData, gradeScalesData] = await Promise.all([
+    const [hierarchyData, assessmentsData, gradeScalesData, allStudentsInClass] = await Promise.all([
         getFullCurriculumHierarchy(classData.stageId),
         getStudentAssessmentsForEnrollment(enrollment.id),
-        getGradeScalesForTeam(classData.teamId)
+        getGradeScalesForTeam(classData.teamId),
+        getStudentsInClass(classId)
     ]);
     
     console.log(`Fetched ${hierarchyData.length} hierarchy items.`);
@@ -464,13 +486,6 @@ export default async function StudentOverviewPage({
     // --- Pass to Client Component --- 
     return (
         <div className="p-4">
-            <h1 className="text-xl font-semibold mb-1">
-                Student Overview: {enrollment.student.firstName} {enrollment.student.lastName}
-            </h1>
-            <p className="text-sm text-muted-foreground mb-4">
-                Class: {classData.name} (Stage {classData.stage?.name})
-            </p>
-            <hr className="mb-4"/>
             <StudentOverviewClient 
                 student={enrollment.student} 
                 classData={classData} 
@@ -479,6 +494,8 @@ export default async function StudentOverviewPage({
                 bottomContentGroups={bottomGroups}
                 gradeComments={gradeComments}
                 studentComments={studentComments}
+                allStudentsInClass={allStudentsInClass}
+                currentClassId={classId}
             />
         </div>
     );

@@ -8,10 +8,17 @@ import {
 } from "@/components/ui/accordion";
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { Class, Stage, Student } from '@/lib/db/schema';
-import { Plus, Save, X } from 'lucide-react';
+import { ChevronDown, Plus, Save, Users, X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import React, { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { createStudentComment } from '../../notes/actions';
@@ -58,6 +65,12 @@ type StudentComment = {
     updatedAt: Date;
 };
 
+type StudentBasicInfo = {
+    id: string;
+    firstName: string;
+    lastName: string;
+};
+
 interface StudentOverviewClientProps {
     student: Student;
     classData: Class & { stage: Stage | null };
@@ -66,6 +79,8 @@ interface StudentOverviewClientProps {
     bottomContentGroups: RankedGroup[]; // Add bottom groups prop
     gradeComments: GradeComment[]; // Add grade comments prop
     studentComments: StudentComment[]; // Add student comments prop
+    allStudentsInClass: StudentBasicInfo[]; // Add students list for dropdown
+    currentClassId: string; // Add current class ID for navigation
 }
 
 // Helper to format the average grade for display
@@ -149,12 +164,15 @@ export default function StudentOverviewClient({
     topContentGroups,
     bottomContentGroups,
     gradeComments,
-    studentComments
+    studentComments,
+    allStudentsInClass,
+    currentClassId
 }: StudentOverviewClientProps) {
 
     const [isCreatingComment, setIsCreatingComment] = useState(false);
     const [commentForm, setCommentForm] = useState({ title: '', content: '' });
     const [isPending, startTransition] = useTransition();
+    const router = useRouter();
 
     // Helper function to format dates for display
     const formatDisplayDate = (date: Date): string => {
@@ -201,8 +219,52 @@ export default function StudentOverviewClient({
         });
     };
 
+    const handleStudentChange = (studentId: string) => {
+        // Navigate to the new student while preserving the classId
+        router.push(`/dashboard/students/${studentId}?classId=${currentClassId}`);
+    };
+
     return (
         <div className="flex flex-col h-[calc(100vh-200px)]">
+            {/* Header with Student Dropdown */}
+            <div className="flex items-center justify-between mb-4">
+                <div>
+                    <h1 className="text-xl font-semibold">
+                        Student Overview: {student.firstName} {student.lastName}
+                    </h1>
+                    <p className="text-sm text-muted-foreground">
+                        Class: {classData.name} (Stage {classData.stage?.name})
+                    </p>
+                </div>
+                
+                {/* Student Navigation Dropdown */}
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="min-w-[200px] justify-between">
+                            <div className="flex items-center">
+                                <Users className="h-4 w-4 mr-2" />
+                                {student.firstName} {student.lastName}
+                            </div>
+                            <ChevronDown className="h-4 w-4 opacity-50" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-[200px]">
+                        {allStudentsInClass.map((studentItem) => (
+                            <DropdownMenuItem
+                                key={studentItem.id}
+                                className={`cursor-pointer ${studentItem.id === student.id ? 'bg-accent' : ''}`}
+                                onClick={() => handleStudentChange(studentItem.id)}
+                            >
+                                {studentItem.firstName} {studentItem.lastName}
+                                {studentItem.id === student.id && (
+                                    <span className="ml-auto text-xs text-muted-foreground">Current</span>
+                                )}
+                            </DropdownMenuItem>
+                        ))}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+
             {/* 2x2 Grid Layout */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
                 
