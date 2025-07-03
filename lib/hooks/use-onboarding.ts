@@ -23,7 +23,7 @@ export interface OnboardingProgress {
   loading: boolean;
 }
 
-export const useOnboarding = () => {
+export const useOnboarding = (classId?: string | null) => {
   const [progress, setProgress] = useState<OnboardingProgress>({
     hasClass: false,
     hasTermDates: false,
@@ -49,24 +49,51 @@ export const useOnboarding = () => {
       const classes = classesRes.ok ? await classesRes.json() : [];
       const students = studentsRes.ok ? await studentsRes.json() : [];
 
-      // Check if user has classes
-      const hasClass = classes.length > 0;
+      // If no classId is provided, check global progress
+      if (!classId) {
+        const hasClass = classes.length > 0;
+        const hasTermDates = classes.some((cls: any) => 
+          cls.terms && cls.terms.length > 0
+        );
+        const hasStudents = students.length > 0;
+        const hasCurriculumPlan = classes.some((cls: any) => 
+          cls.curriculumItems && cls.curriculumItems.length > 0
+        );
+        const hasGrades = false; // We'll implement this check when needed
 
-      // Check if any class has term dates
-      const hasTermDates = classes.some((cls: any) => 
-        cls.terms && cls.terms.length > 0
+        setProgress({
+          hasClass,
+          hasTermDates,
+          hasStudents,
+          hasCurriculumPlan,
+          hasGrades,
+          loading: false,
+        });
+        return;
+      }
+
+      // Class-specific checks when classId is provided
+      const currentClass = classes.find((cls: any) => cls.id === classId);
+      
+      // Check if the specific class exists
+      const hasClass = !!currentClass;
+
+      // Check if the specific class has term dates
+      const hasTermDates = currentClass ? 
+        (currentClass.terms && currentClass.terms.length > 0) : false;
+
+      // Check if the specific class has students enrolled
+      const classStudents = students.filter((student: any) => 
+        student.classId === classId
       );
+      const hasStudents = classStudents.length > 0;
 
-      // Check if user has students enrolled
-      const hasStudents = students.length > 0;
+      // Check if the specific class has curriculum planning
+      const hasCurriculumPlan = currentClass ? 
+        (currentClass.curriculumItems && currentClass.curriculumItems.length > 0) : false;
 
-      // Check curriculum planning (simplified check)
-      const hasCurriculumPlan = classes.some((cls: any) => 
-        cls.curriculumItems && cls.curriculumItems.length > 0
-      );
-
-      // Check if any grading has been done
-      const hasGrades = false; // We'll implement this check when needed
+      // TODO: Check if any grading has been done for this specific class
+      const hasGrades = false;
 
       setProgress({
         hasClass,
@@ -85,7 +112,7 @@ export const useOnboarding = () => {
 
   useEffect(() => {
     checkProgress();
-  }, []);
+  }, [classId]); // Re-run when classId changes
 
   const getSteps = (): OnboardingStep[] => [
     {
@@ -104,7 +131,7 @@ export const useOnboarding = () => {
       completed: progress.hasTermDates,
       required: true,
       action: 'Set Term Dates',
-      href: '/dashboard/settings', // Assume term dates are set in class settings
+      href: classId ? `/dashboard/settings?classId=${classId}` : '/dashboard/settings',
     },
     {
       id: 'add-students',
@@ -114,7 +141,7 @@ export const useOnboarding = () => {
       required: true,
       prerequisite: 'create-class',
       action: 'Add Students',
-      href: '/dashboard/students',
+      href: classId ? `/dashboard/students?classId=${classId}` : '/dashboard/students',
     },
     {
       id: 'plan-curriculum',
@@ -124,7 +151,7 @@ export const useOnboarding = () => {
       required: true,
       prerequisite: 'set-term-dates',
       action: 'Plan Curriculum',
-      href: '/dashboard/planning',
+      href: classId ? `/dashboard/planning?classId=${classId}` : '/dashboard/planning',
     },
     {
       id: 'start-grading',
@@ -134,7 +161,7 @@ export const useOnboarding = () => {
       required: false,
       prerequisite: 'plan-curriculum',
       action: 'Start Grading',
-      href: '/dashboard/grading',
+      href: classId ? `/dashboard/grading?classId=${classId}` : '/dashboard/grading',
     },
   ];
 

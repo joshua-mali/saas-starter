@@ -11,7 +11,7 @@ import { createClient } from '@/lib/supabase/client'
 import { BarChart3, ClipboardCheck, LayoutPanelLeft, MessageSquare, Save, StickyNote, UsersRound, X } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { createGeneralNote, createStudentComment } from './notes/actions'
@@ -53,13 +53,17 @@ interface Student {
 
 export default function DashboardPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [user, setUser] = useState<any>(null)
   const [teamData, setTeamData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [students, setStudents] = useState<Student[]>([])
   
+  // Get current class ID from URL parameters
+  const currentClassId = searchParams.get('classId')
+  
   // Onboarding state
-  const onboarding = useOnboarding()
+  const onboarding = useOnboarding(currentClassId)
   
   const [showQuickNoteForm, setShowQuickNoteForm] = useState(false)
   const [quickNoteData, setQuickNoteData] = useState<QuickNoteFormData>({
