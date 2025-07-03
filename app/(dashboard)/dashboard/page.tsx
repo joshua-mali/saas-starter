@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useOnboarding } from '@/lib/hooks/use-onboarding'
 import { createClient } from '@/lib/supabase/client'
-import { MessageSquare, Plus, Save, StickyNote, X } from 'lucide-react'
+import { BarChart3, ClipboardCheck, LayoutPanelLeft, MessageSquare, Save, StickyNote, UsersRound, X } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -633,7 +633,7 @@ export default function DashboardPage() {
                     variant="ghost"
                     className="w-full justify-start text-[var(--color-charcoal)] hover:text-[var(--color-brand)]"
                   >
-                    <MessageSquare className="h-4 w-4 mr-2" />
+                    <UsersRound className="h-4 w-4 mr-2" />
                     Students
                   </Button>
                 )}
@@ -644,7 +644,7 @@ export default function DashboardPage() {
                     variant="ghost"
                     className="w-full justify-start text-[var(--color-charcoal)] hover:text-[var(--color-brand)]"
                   >
-                    <Plus className="h-4 w-4 mr-2" />
+                    <LayoutPanelLeft className="h-4 w-4 mr-2" />
                     Planning
                   </Button>
                 )}
@@ -655,7 +655,7 @@ export default function DashboardPage() {
                     variant="ghost"
                     className="w-full justify-start text-[var(--color-charcoal)] hover:text-[var(--color-brand)]"
                   >
-                    <Plus className="h-4 w-4 mr-2" />
+                    <ClipboardCheck className="h-4 w-4 mr-2" />
                     Grading
                   </Button>
                 )}
@@ -666,7 +666,7 @@ export default function DashboardPage() {
                     variant="ghost"
                     className="w-full justify-start text-[var(--color-charcoal)] hover:text-[var(--color-brand)]"
                   >
-                    <Plus className="h-4 w-4 mr-2" />
+                    <BarChart3 className="h-4 w-4 mr-2" />
                     Reports
                   </Button>
                 )}

@@ -1,5 +1,5 @@
 import { db } from '@/lib/db/drizzle';
-import { gradeScales, teamMembers, terms, type GradeScale, type Term } from '@/lib/db/schema'; // Import necessary schema items
+import { classes, gradeScales, teamMembers, terms, type Class, type GradeScale, type Term } from '@/lib/db/schema'; // Import necessary schema items
 import { createClient } from '@/lib/supabase/server';
 import { and, asc, eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
@@ -23,6 +23,14 @@ async function getGradeScalesForClass(classId: string): Promise<GradeScale[]> {
              .from(gradeScales)
              .where(eq(gradeScales.classId, classId))
              .orderBy(asc(gradeScales.numericValue));
+}
+
+// Function to get class details for calendar year
+async function getClassDetails(classId: string): Promise<Class | null> {
+    const result = await db.query.classes.findFirst({
+        where: eq(classes.id, classId)
+    });
+    return result || null;
 }
 
 type SettingsPageProps = {
@@ -52,14 +60,20 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
   }
   const teamId = userTeam.teamId;
 
-  // Determine current year and fetch terms
-  const currentYear = new Date().getFullYear();
+  // Determine calendar year based on selected class or fallback to current year
+  let calendarYear = new Date().getFullYear(); // Default fallback
+  let classGradeScales: GradeScale[] = [];
   
-  // Fetch grade scales only if classId is provided
-  const [existingTerms, classGradeScales] = await Promise.all([
-      getTermDatesForYear(teamId, currentYear),
-      classId ? getGradeScalesForClass(classId) : Promise.resolve([])
-  ]);
+  if (classId) {
+    const classDetails = await getClassDetails(classId);
+    if (classDetails) {
+      calendarYear = classDetails.calendarYear; // Use class's calendar year
+    }
+    classGradeScales = await getGradeScalesForClass(classId);
+  }
+  
+  // Fetch terms for the determined calendar year
+  const existingTerms = await getTermDatesForYear(teamId, calendarYear);
 
   // Render the Settings UI component, passing all data
   return (
@@ -69,7 +83,7 @@ export default async function SettingsPage({ searchParams }: SettingsPageProps) 
       </h1>
       <Settings 
         initialTerms={existingTerms} 
-        calendarYear={currentYear} 
+        calendarYear={calendarYear} 
         gradeScales={classGradeScales}
         classId={classId}
       />
